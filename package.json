@@ -1,0 +1,27 @@
+{
+  "name": "forge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev:api": "pnpm --filter @forge/server dev",
+    "dev:cli": "pnpm --filter @forge/cli dev",
+    "docker": "docker compose up -d",
+    "docker:new": "docker compose up --force-recreate --build -d",
+    "typecheck": "pnpm -r typecheck",
+    "cli:global": "pnpm --filter @forge/cli build && pnpm add -g ./packages/cli",
+    "cli:link": "pnpm --filter @forge/cli build && pnpm --dir packages/cli link --global",
+    "lint": "oxlint",
+    "format": "oxfmt"
+  },
+  "dependencies": {
+    "oxfmt": "^0.54.0",
+    "oxlint": "^1.69.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@10.12.1"
+}
