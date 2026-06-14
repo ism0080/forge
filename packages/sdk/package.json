@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "publish:local": "npm version prerelease && npm publish --registry http://localhost:4873"
   },
   "dependencies": {
     "@forge/core": "workspace:*"

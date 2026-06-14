@@ -37,6 +37,9 @@ COPY --from=prod-deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=prod-deps /app/packages/core/package.json ./packages/core/package.json
 COPY --from=prod-deps /app/packages/server/package.json ./packages/server/package.json
 
+COPY --from=prod-deps /app/packages/server/node_modules ./packages/server/node_modules
+COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 
