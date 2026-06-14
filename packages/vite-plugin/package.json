@@ -22,11 +22,11 @@
     "@ism0080/forge-core": "workspace:*"
   },
   "peerDependencies": {
-    "vite": "^5.0.0 || ^6.0.0"
+    "vite": "^7.0.0 || ^8.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
     "typescript": "^5.8.3",
-    "vite": "^6.0.0"
+    "vite": "^8.0.0"
   }
 }
