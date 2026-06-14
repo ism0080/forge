@@ -9,6 +9,7 @@ import { NotFoundRoute } from "./not-found.js";
 import { PluginsRoute } from "./plugins.js";
 import { DirectoryRoute, SiteRoute } from "./sites.js";
 import { UploadRoute } from "./upload.js";
+import { WebhookRoute } from "./webhook.js";
 import { Effect } from "effect";
 
 export const RoutesLayer = Layer.mergeAll(
@@ -23,6 +24,7 @@ export const RoutesLayer = Layer.mergeAll(
   DbUpdateRoute,
   DbDeleteRoute,
   SiteRoute,
+  WebhookRoute,
   NotFoundRoute,
   Layer.effectDiscard(
     Effect.gen(function* () {

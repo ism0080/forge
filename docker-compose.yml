@@ -7,6 +7,8 @@ services:
       PORT: 8787
       SITE_BUCKET: forge-sites
       STORAGE_ROOT: /app/data
+      EXTERNAL_API_URL: ${EXTERNAL_API_URL}
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY}
     volumes:
       - forge-data:/app/data
     ports:

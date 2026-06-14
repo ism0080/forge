@@ -1,9 +1,11 @@
 import { createServer } from "node:http";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { layerFetch } from "@effect/platform-node/NodeHttpClient";
 import { Effect, Layer } from "effect";
 import { HttpMiddleware, HttpServer, HttpRouter } from "effect/unstable/http";
 import { ServerConfigLayer, ServerConfigService } from "./config/server.js";
+import { WebhookConfigLayer } from "./config/webhook.js";
 import { LocalFileDatabaseLayer } from "./db/local-file.js";
 import { DbEventsConsoleTapLayer, DbEventsInMemoryLayer } from "./db/events.js";
 import { HttpRouterLayer, RoutesLayer } from "./routes/index.js";
@@ -45,6 +47,8 @@ const AppLayer = HttpRouter.serve(RoutesLayer).pipe(
     ),
   ),
   Layer.provide(ServerConfigLayer),
+  Layer.provide(layerFetch),
+  Layer.provide(WebhookConfigLayer),
 );
 
 Layer.launch(AppLayer).pipe(NodeRuntime.runMain);
