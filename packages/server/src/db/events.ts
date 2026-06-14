@@ -1,4 +1,4 @@
-import type { DbChangeEvent } from "@forge/core";
+import type { DbChangeEvent } from "@ism0080/forge-core";
 import { Context, Effect, Layer } from "effect";
 
 export interface DbEventFilter {

@@ -8,7 +8,7 @@ import type {
   DbListQuery,
   DbSortBy,
   DbSortDir,
-} from "@forge/core";
+} from "@ism0080/forge-core";
 import { type DatabaseApi, DatabaseService } from "./service.js";
 import { DbEventsService } from "./events.js";
 

@@ -29,7 +29,7 @@ export const RoutesLayer = Layer.mergeAll(
   Layer.effectDiscard(
     Effect.gen(function* () {
       const { port } = yield* ServerConfigService;
-      yield* Effect.log(`@forge/server listening on http://localhost:${port}`);
+      yield* Effect.log(`@ism0080/forge-server listening on http://localhost:${port}`);
     }),
   ),
 );

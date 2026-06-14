@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from "@forge/core";
+import type { PluginDescriptor } from "@ism0080/forge-core";
 
 export const plugins: ReadonlyArray<PluginDescriptor> = [
   {

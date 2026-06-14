@@ -1,4 +1,4 @@
-import type { ForgeConfig } from "@forge/core";
+import type { ForgeConfig } from "@ism0080/forge-core";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";

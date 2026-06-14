@@ -4,7 +4,7 @@ import {
   DbUpdateRequestSchema,
   type DbDocumentData,
   type DbListQuery,
-} from "@forge/core";
+} from "@ism0080/forge-core";
 import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { DatabaseService } from "../db/service.js";

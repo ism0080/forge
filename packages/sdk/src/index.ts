@@ -15,7 +15,7 @@ import type {
   DbUpdateResponse,
   WebhookSendInput,
   WebhookSendResponse,
-} from "@forge/core";
+} from "@ism0080/forge-core";
 
 export interface ForgeClientOptions {
   readonly baseUrl: string;

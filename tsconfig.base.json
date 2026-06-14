@@ -4,9 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "paths": {
-      "@forge/core": ["./packages/core/src/index.ts"],
-      "@forge/sdk": ["./packages/sdk/src/index.ts"],
-      "@forge/vite-plugin": ["./packages/vite-plugin/src/index.ts"]
+      "@ism0080/forge-core": ["./packages/core/src/index.ts"],
+      "@ism0080/forge-sdk": ["./packages/sdk/src/index.ts"],
+      "@ism0080/forge-vite-plugin": ["./packages/vite-plugin/src/index.ts"]
     },
     "strict": true,
     "declaration": true,

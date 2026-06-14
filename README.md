@@ -1,6 +1,6 @@
-# Forge (MVP scaffold)
+# Forge
 
-This repository is a minimal Forge-like internal platform scaffold:
+This repository is a minimal Quick-like internal platform scaffold:
 
 - `packages/server`: Effect-based API with plugin registry and local filesystem storage adapter
 - `packages/cli`: `forge` CLI (`init`, `deploy`, `whoami`, `plugins list`, `dev`)
@@ -41,7 +41,7 @@ Services:
 ## Build and run CLI
 
 ```bash
-pnpm --filter @forge/cli build
+pnpm --filter @ism0080/forge-cli build
 node packages/cli/dist/index.js init demo.localhost
 node packages/cli/dist/index.js deploy
 node packages/cli/dist/index.js deploy ./dist demo
@@ -80,7 +80,7 @@ Notes:
 ## SDK usage
 
 ```ts
-import { createClient } from "@forge/sdk";
+import { createClient } from "@ism0080/forge-sdk";
 
 const client = createClient({
   baseUrl: "http://localhost:8787",

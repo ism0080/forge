@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { DEFAULT_CONFIG, type ForgeConfig } from "@forge/core";
+import { DEFAULT_CONFIG, type ForgeConfig } from "@ism0080/forge-core";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";

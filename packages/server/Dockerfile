@@ -16,8 +16,8 @@ FROM deps AS build
 COPY packages/core packages/core
 COPY packages/server packages/server
 
-RUN pnpm --filter @forge/core build
-RUN pnpm --filter @forge/server build
+RUN pnpm --filter @ism0080/forge-core build
+RUN pnpm --filter @ism0080/forge-server build
 
 FROM base AS prod-deps
 
@@ -25,7 +25,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN pnpm install --prod --filter @forge/server... --frozen-lockfile
+RUN pnpm install --prod --filter @ism0080/forge-server... --frozen-lockfile
 
 FROM node:25-alpine AS runtime
 

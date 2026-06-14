@@ -1,5 +1,5 @@
 {
-  "name": "@forge/sdk",
+  "name": "@ism0080/forge-sdk",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -10,6 +10,6 @@
     "publish:local": "npm version prerelease && npm publish --registry http://localhost:4873"
   },
   "dependencies": {
-    "@forge/core": "workspace:*"
+    "@ism0080/forge-core": "workspace:*"
   }
 }

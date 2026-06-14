@@ -4,7 +4,7 @@ import type {
   DbDocument,
   DbListQuery,
   DbUpdateInput,
-} from "@forge/core";
+} from "@ism0080/forge-core";
 import { Context, Effect } from "effect";
 
 export interface DbListResult {
