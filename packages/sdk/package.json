@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",
-    "publish:local": "npm version prerelease && npm publish --registry http://localhost:4873"
+    "publish:local": "pnpm build && pnpm publish --registry http://localhost:4873 --no-git-checks --tag local"
   },
   "dependencies": {
     "@ism0080/forge-core": "workspace:*"
