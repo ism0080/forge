@@ -5,7 +5,8 @@ This repository is a minimal Quick-like internal platform scaffold:
 - `packages/server`: Effect-based API with plugin registry and local filesystem storage adapter
 - `packages/cli`: `forge` CLI (`init`, `deploy`, `whoami`, `plugins list`, `dev`)
 - `packages/core`: shared types and configuration contracts
-- `packages/sdk`: reusable SDK (`createClient`) for DB interactions
+- `packages/sdk`: reusable SDK (`createClient`) for DB and webhook interactions
+- `packages/vite-plugin`: Vite plugin that injects `forge.json` values through `virtual:forge`
 - `docker-compose.yml`: local stack with API, persistent local storage, and NGINX
 
 ## Requirements
@@ -36,27 +37,28 @@ docker compose up --force-recreate
 Services:
 
 - API: `http://localhost:8787`
-- NGINX: `http://localhost:8080`
+- NGINX: `http://localhost:8880`
 
 ## Build and run CLI
 
 ```bash
 pnpm --filter @ism0080/forge-cli build
-node packages/cli/dist/index.js init demo.localhost
+node packages/cli/dist/index.js init demo
 node packages/cli/dist/index.js deploy
 node packages/cli/dist/index.js deploy ./dist demo
 node packages/cli/dist/index.js whoami
 node packages/cli/dist/index.js plugins list
+node packages/cli/dist/index.js dev
 ```
 
-`deploy` now supports optional positional arguments:
+`deploy` supports optional positional arguments:
 
 - `deploy <folder> <site-id>` deploys without requiring `forge.json`
 - `deploy` (without args) continues to read `forge.json`
 
-## DB API (pluggable)
+## DB API
 
-The server now includes a pluggable database service layer (similar to storage):
+The server includes a pluggable database service layer (similar to storage):
 
 - Interface: `packages/server/src/db/service.ts`
 - Local adapter: `packages/server/src/db/local-file.ts`
@@ -72,9 +74,9 @@ Current endpoints:
 
 Notes:
 
-- Documents now include `version` (starting at `1` and incrementing on each update).
-- If `expectedVersion` does not match, API returns `409 version conflict`.
-- DB adapter emits create/update/delete change events through a pluggable events service (`packages/server/src/db/events.ts`).
+- Documents include `version` (starting at `1` and incrementing on each update).
+- If `expectedVersion` does not match, the API returns `409 version conflict`.
+- The DB adapter emits create/update/delete change events through a pluggable events service (`packages/server/src/db/events.ts`).
 - Current default wiring uses an in-memory pub/sub bus (`DbEventsInMemoryLayer`) plus a console tap (`DbEventsConsoleTapLayer`), ready for websocket fanout wiring.
 
 ## SDK usage
@@ -116,6 +118,27 @@ const unsubscribe = posts.subscribe({
 unsubscribe();
 ```
 
+## Webhook gateway
+
+The server can forward webhook calls to an external API configured with `EXTERNAL_API_URL` and `EXTERNAL_API_KEY`:
+
+- `POST /api/webhook` with `{ "title": "...", "message": "...", "payload": optional }`
+
+SDK usage:
+
+```ts
+const result = await client.webhook({
+  title: "New post",
+  message: "A post was published",
+  payload: { postId: "123" },
+});
+```
+
+## Identity and health
+
+- `GET /api/whoami` returns the trusted user identity. In local development it falls back to a dev profile unless the request includes `X-Forge-User-*` headers.
+- `GET /health` returns `{ ok: true }`.
+
 ## Multiple sites via subdomain
 
 Deploy different folders with different `siteId` values (for example `demo` and `docs`).
@@ -129,28 +152,82 @@ Then add local host mappings:
 
 And open:
 
-- `http://demo.localhost:8080`
-- `http://docs.localhost:8080`
+- `http://demo.localhost:8880`
+- `http://docs.localhost:8880`
 
 ## Multiple sites via path (no hosts file)
 
 You can also access sites by path on localhost:
 
-- `http://localhost:8080/s/demo/`
-- `http://localhost:8080/s/docs/`
+- `http://localhost:8880/s/demo/`
+- `http://localhost:8880/s/docs/`
 
 Any asset path works too, for example:
 
-- `http://localhost:8080/s/demo/index.html`
+- `http://localhost:8880/s/demo/index.html`
 
-## Site directory at root
+## Site directory
 
-Nginx root now serves a simple directory page listing deployed sites:
+`/directory` serves a simple directory page listing deployed sites:
 
-- `http://localhost:8080/`
+- `http://localhost:8880/directory`
+
+NGINX also maps the root path to the directory:
+
+- `http://localhost:8880/`
 
 By default, the CLI targets `http://localhost:8787`.
 Override with `FORGE_API_BASE_URL`.
+
+## Vite plugin
+
+`@ism0080/forge-vite-plugin` reads `forge.json` and exposes its values through the `virtual:forge` module.
+
+```ts
+import { forgePlugin } from "@ism0080/forge-vite-plugin";
+
+export default {
+  plugins: [forgePlugin()],
+};
+```
+
+```ts
+import { apiBaseUrl, baseUrl, siteId, spa, entry } from "virtual:forge";
+
+const client = createClient({ baseUrl: apiBaseUrl, siteId });
+```
+
+Options:
+
+```ts
+forgePlugin({
+  configPath: "./forge.json", // default
+  base: "./",                 // default Vite base
+});
+```
+
+## Local registry
+
+The packages publish to `http://localhost:4873`:
+
+```bash
+pnpm --filter @ism0080/forge-sdk publish:local
+pnpm --filter @ism0080/forge-vite-plugin publish:local
+pnpm --filter @ism0080/forge-cli publish:local
+```
+
+Install in a consumer project:
+
+```bash
+pnpm add @ism0080/forge-sdk --registry http://localhost:4873
+pnpm add -D @ism0080/forge-vite-plugin --registry http://localhost:4873
+```
+
+Or set the registry once in the consumer `.npmrc`:
+
+```ini
+@ism0080:registry=http://localhost:4873
+```
 
 ## Forge config
 
@@ -158,7 +235,7 @@ Generated `forge.json`:
 
 ```json
 {
-  "siteId": "demo.localhost",
+  "siteId": "demo",
   "entry": ".",
   "apiBaseUrl": "http://localhost:8787",
   "spa": true
