@@ -123,6 +123,19 @@ export interface DbListResponse {
   readonly nextCursor?: string;
 }
 
+export interface WebhookSendInput {
+  readonly title: string;
+  readonly message: string;
+  readonly payload?: unknown;
+}
+
+export interface WebhookSendResponse {
+  readonly forwarded: boolean;
+  readonly externalStatus?: number;
+  readonly externalBody?: unknown;
+  readonly error?: string;
+}
+
 export const DbDocumentDataSchema = Schema.Unknown;
 
 export const DbDocumentSchema = Schema.Struct({
@@ -185,6 +198,19 @@ export const DbChangeEventSchema = Schema.Struct({
 export const DbListResponseSchema = Schema.Struct({
   documents: Schema.Array(DbDocumentSchema),
   nextCursor: Schema.optional(Schema.String),
+});
+
+export const WebhookSendInputSchema = Schema.Struct({
+  title: Schema.NonEmptyString,
+  message: Schema.NonEmptyString,
+  payload: Schema.optional(Schema.Unknown),
+});
+
+export const WebhookSendResponseSchema = Schema.Struct({
+  forwarded: Schema.Boolean,
+  externalStatus: Schema.optional(Schema.Number),
+  externalBody: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.String),
 });
 
 export class ForgeError extends Error {

@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { WebhookConfigService } from "../config/webhook.js";
 

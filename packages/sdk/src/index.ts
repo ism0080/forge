@@ -13,6 +13,8 @@ import type {
   DbListResponse,
   DbUpdateInput,
   DbUpdateResponse,
+  WebhookSendInput,
+  WebhookSendResponse,
 } from "@forge/core";
 
 export interface ForgeClientOptions {
@@ -41,6 +43,7 @@ export interface ForgeClient {
   readonly db: {
     readonly collection: (name: string) => DbCollectionClient;
   };
+  readonly webhook: (input: WebhookSendInput) => Promise<WebhookSendResponse>;
 }
 
 const ensureNoLeadingSlash = (value: string): string => value.replace(/^\/+/, "");
@@ -143,6 +146,21 @@ export const createClient = (options: ForgeClientOptions): ForgeClient => {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
 
   return {
+    webhook: async (input: WebhookSendInput) => {
+      const response = await fetch(`${baseUrl}/api/webhook`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          title: input.title,
+          message: input.message,
+          payload: input.payload,
+        }),
+      });
+      await assertOk(response);
+      return parseJson<WebhookSendResponse>(response);
+    },
     db: {
       collection: (name: string): DbCollectionClient => {
         const collection = ensureNoLeadingSlash(name);
