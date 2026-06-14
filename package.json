@@ -13,7 +13,8 @@
     "cli:global": "pnpm --filter @ism0080/forge-cli build && pnpm add -g ./packages/cli",
     "cli:link": "pnpm --filter @ism0080/forge-cli build && pnpm --dir packages/cli link --global",
     "lint": "oxlint",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "publish:all": "pnpm -r build && pnpm -r exec npm version patch --no-git-tag-version && pnpm -r publish --access public --no-git-checks"
   },
   "dependencies": {
     "oxfmt": "^0.54.0",
