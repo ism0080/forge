@@ -27,7 +27,7 @@ export const WebhookRoute = HttpRouter.add(
     const externalRequest = HttpClientRequest.post(externalApiUrl, {
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${externalApiKey}`,
+        "x-api-key": externalApiKey,
       },
     }).pipe(HttpClientRequest.bodyJsonUnsafe(externalBody));
 
