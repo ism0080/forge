@@ -1,20 +1,23 @@
 import { Config, Context, Effect, Layer } from "effect";
 
-export class ServerConfigService extends Context.Service<
-  ServerConfigService,
+export const serverConfig = Config.all({
+  port: Config.number("PORT").pipe(Config.withDefault(8787)),
+  host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+});
+
+export class AppConfigService extends Context.Service<
+  AppConfigService,
   {
-    readonly port: number;
     readonly siteBucket: string;
   }
->()("forge/ServerConfigService") {}
+>()("forge/AppConfigService") {}
 
-export const ServerConfigLayer = Layer.effect(
-  ServerConfigService,
+export const AppConfigLayer = Layer.effect(
+  AppConfigService,
   Effect.gen(function* () {
-    const port = yield* Config.number("PORT").pipe(Config.withDefault(8787));
     const siteBucket = yield* Config.string("SITE_BUCKET").pipe(Config.withDefault("forge-sites"));
+
     return {
-      port,
       siteBucket,
     };
   }),
