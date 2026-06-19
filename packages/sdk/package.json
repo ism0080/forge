@@ -10,6 +10,8 @@
     "publish:local": "pnpm build && pnpm publish --registry http://localhost:4873 --no-git-checks --tag local"
   },
   "dependencies": {
-    "@ism0080/forge-core": "workspace:*"
+    "@ism0080/forge-core": "workspace:*",
+    "@ism0080/forge-server": "workspace:*",
+    "effect": "4.0.0-beta.80"
   }
 }

@@ -4,6 +4,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    "api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js"
+    }
+  },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",

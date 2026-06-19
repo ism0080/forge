@@ -56,11 +56,6 @@ export interface DbDocument {
   readonly updatedAt: string;
 }
 
-export interface DbCreateInput {
-  readonly data: DbDocumentData;
-  readonly id?: string;
-}
-
 export interface DbCreateRequest extends DbCreateInput {
   readonly siteId: string;
 }
@@ -98,14 +93,16 @@ export type DbSortBy = "createdAt" | "updatedAt" | "id";
 
 export type DbSortDir = "asc" | "desc";
 
-export interface DbListQuery {
-  readonly limit?: number;
-  readonly cursor?: string;
-  readonly whereField?: string;
-  readonly whereValue?: string;
-  readonly sortBy?: DbSortBy;
-  readonly sortDir?: DbSortDir;
-}
+export const DbListQuerySchema = Schema.Struct({
+  siteId: Schema.String,
+  limit: Schema.optional(Schema.NumberFromString),
+  cursor: Schema.optional(Schema.String),
+  whereField: Schema.optional(Schema.String),
+  whereValue: Schema.optional(Schema.String),
+  sortBy: Schema.optional(Schema.Literals(["createdAt", "updatedAt", "id"])),
+  sortDir: Schema.optional(Schema.Literals(["asc", "desc"])),
+});
+export type DbListQuery = Omit<Schema.Schema.Type<typeof DbListQuerySchema>, "siteId">;
 
 export type DbChangeType = "created" | "updated" | "deleted";
 
@@ -123,19 +120,6 @@ export interface DbListResponse {
   readonly nextCursor?: string;
 }
 
-export interface WebhookSendInput {
-  readonly title: string;
-  readonly message: string;
-  readonly payload?: unknown;
-}
-
-export interface WebhookSendResponse {
-  readonly forwarded: boolean;
-  readonly externalStatus?: number;
-  readonly externalBody?: unknown;
-  readonly error?: string;
-}
-
 export const DbDocumentDataSchema = Schema.Unknown;
 
 export const DbDocumentSchema = Schema.Struct({
@@ -148,16 +132,12 @@ export const DbDocumentSchema = Schema.Struct({
   updatedAt: Schema.String,
 });
 
-export const DbCreateInputSchema = Schema.Struct({
-  data: DbDocumentDataSchema,
-  id: Schema.optional(Schema.String),
-});
-
 export const DbCreateRequestSchema = Schema.Struct({
   siteId: Schema.String,
   data: DbDocumentDataSchema,
   id: Schema.optional(Schema.String),
 });
+export type DbCreateInput = Omit<Schema.Schema.Type<typeof DbCreateRequestSchema>, "siteId">;
 
 export const DbUpdateInputSchema = Schema.Struct({
   data: DbDocumentDataSchema,
@@ -206,12 +186,24 @@ export const WebhookSendInputSchema = Schema.Struct({
   payload: Schema.optional(Schema.Unknown),
 });
 
-export const WebhookSendResponseSchema = Schema.Struct({
-  forwarded: Schema.Boolean,
-  externalStatus: Schema.optional(Schema.Number),
-  externalBody: Schema.optional(Schema.Unknown),
-  error: Schema.optional(Schema.String),
+export type WebhookSendInput = Schema.Schema.Type<typeof WebhookSendInputSchema>;
+
+export const WebhookSendSuccessResponseSchema = Schema.Struct({
+  forwarded: Schema.Literal(true),
+  externalStatus: Schema.Number,
+  externalBody: Schema.Json,
 });
+
+export type WebhookSendSuccessResponse = Schema.Schema.Type<
+  typeof WebhookSendSuccessResponseSchema
+>;
+
+export const WebhookSendErrorResponseSchema = Schema.Struct({
+  forwarded: Schema.Literal(false),
+  error: Schema.Json,
+});
+
+export type WebhookSendErrorResponse = Schema.Schema.Type<typeof WebhookSendErrorResponseSchema>;
 
 export class ForgeError extends Error {
   constructor(
@@ -226,6 +218,6 @@ export class ForgeError extends Error {
 export const DEFAULT_CONFIG: ForgeConfig = {
   siteId: "my-site",
   entry: ".",
-  apiBaseUrl: "http://localhost:8787",
+  apiBaseUrl: "https://media-svr.stingray-goby.ts.net:1234",
   spa: true,
 };

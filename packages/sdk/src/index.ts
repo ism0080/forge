@@ -14,8 +14,12 @@ import type {
   DbUpdateInput,
   DbUpdateResponse,
   WebhookSendInput,
-  WebhookSendResponse,
+  WebhookSendSuccessResponse,
 } from "@ism0080/forge-core";
+import { Effect } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+import { HttpApiClient } from "effect/unstable/httpapi";
+import { Api } from "@ism0080/forge-server/api";
 
 export interface ForgeClientOptions {
   readonly baseUrl: string;
@@ -43,7 +47,7 @@ export interface ForgeClient {
   readonly db: {
     readonly collection: (name: string) => DbCollectionClient;
   };
-  readonly webhook: (input: WebhookSendInput) => Promise<WebhookSendResponse>;
+  readonly webhook: (input: WebhookSendInput) => Promise<WebhookSendSuccessResponse>;
 }
 
 const ensureNoLeadingSlash = (value: string): string => value.replace(/^\/+/, "");
@@ -112,6 +116,63 @@ const buildEventsUrl = (baseUrl: string, siteId: string, collection: string): st
   return url.toString();
 };
 
+const createDbSubscription = (
+  baseUrl: string,
+  siteId: string,
+  collection: string,
+  handlers: {
+    readonly onCreate?: (document: DbDocument) => void;
+    readonly onUpdate?: (document: DbDocument) => void;
+    readonly onDelete?: (id: string) => void;
+    readonly onEvent?: (event: DbChangeEvent) => void;
+    readonly onOpen?: () => void;
+    readonly onError?: (event: Event) => void;
+    readonly onClose?: (event: CloseEvent) => void;
+  },
+): (() => void) => {
+  const wsUrl = buildEventsUrl(baseUrl, siteId, collection).replace(/^http/i, "ws");
+  const socket = new WebSocket(wsUrl);
+
+  socket.onopen = () => {
+    handlers.onOpen?.();
+  };
+
+  socket.onerror = (event) => {
+    handlers.onError?.(event);
+  };
+
+  socket.onclose = (event) => {
+    handlers.onClose?.(event);
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      const parsed = JSON.parse(String(event.data)) as DbChangeEvent;
+      handlers.onEvent?.(parsed);
+
+      if (parsed.type === "created" && parsed.document) {
+        handlers.onCreate?.(parsed.document);
+        return;
+      }
+
+      if (parsed.type === "updated" && parsed.document) {
+        handlers.onUpdate?.(parsed.document);
+        return;
+      }
+
+      if (parsed.type === "deleted") {
+        handlers.onDelete?.(parsed.id);
+      }
+    } catch {
+      // ignore malformed payloads
+    }
+  };
+
+  return () => {
+    socket.close();
+  };
+};
+
 const parseSortBy = (value: unknown): DbSortBy | undefined => {
   if (value === "createdAt" || value === "updatedAt" || value === "id") {
     return value;
@@ -159,7 +220,7 @@ export const createClient = (options: ForgeClientOptions): ForgeClient => {
         }),
       });
       await assertOk(response);
-      return parseJson<WebhookSendResponse>(response);
+      return parseJson<WebhookSendSuccessResponse>(response);
     },
     db: {
       collection: (name: string): DbCollectionClient => {
@@ -232,54 +293,70 @@ export const createClient = (options: ForgeClientOptions): ForgeClient => {
             await assertOk(response);
             await parseJson<DbDeleteResponse>(response);
           },
-          subscribe: (handlers) => {
-            const wsUrl = buildEventsUrl(baseUrl, options.siteId, collection).replace(
-              /^http/i,
-              "ws",
-            );
-            const socket = new WebSocket(wsUrl);
-
-            socket.onopen = () => {
-              handlers.onOpen?.();
-            };
-
-            socket.onerror = (event) => {
-              handlers.onError?.(event);
-            };
-
-            socket.onclose = (event) => {
-              handlers.onClose?.(event);
-            };
-
-            socket.onmessage = (event) => {
-              try {
-                const parsed = JSON.parse(String(event.data)) as DbChangeEvent;
-                handlers.onEvent?.(parsed);
-
-                if (parsed.type === "created" && parsed.document) {
-                  handlers.onCreate?.(parsed.document);
-                  return;
-                }
-
-                if (parsed.type === "updated" && parsed.document) {
-                  handlers.onUpdate?.(parsed.document);
-                  return;
-                }
-
-                if (parsed.type === "deleted") {
-                  handlers.onDelete?.(parsed.id);
-                }
-              } catch {
-                // ignore malformed payloads
-              }
-            };
-
-            return () => {
-              socket.close();
-            };
-          },
+          subscribe: (handlers) => createDbSubscription(baseUrl, options.siteId, collection, handlers),
         };
       },
     },
   };
 };
+
+export async function createClientV2({ baseUrl, siteId }: ForgeClientOptions) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const client = await Effect.runPromise(
+    HttpApiClient.make(Api, { baseUrl: normalizedBaseUrl }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+    ),
+  );
+
+  return {
+    webhook: (input: WebhookSendInput) =>
+      Effect.runPromise(client["server.webhook.gateway"]["webhook.forward"]({ payload: input })),
+    db: {
+      collection: (name: string) => {
+        const collection = ensureNoLeadingSlash(name);
+        return {
+          list: (query?: DbListQuery) =>
+            Effect.runPromise(
+              client["server.db"]["db.documents.list"]({
+                params: { collection },
+                query: { ...query, siteId },
+              }),
+            ),
+          create: (input: DbCreateInput) =>
+            Effect.runPromise(
+              client["server.db"]["db.documents.create"]({
+                params: { collection },
+                payload: { siteId, data: input.data, id: input.id },
+              }),
+            ),
+          get: (id: string) =>
+            Effect.runPromise(
+              client["server.db"]["db.documents.get"]({
+                params: { collection, id },
+                query: { siteId },
+              }),
+            ),
+          update: (id: string, input: DbUpdateInput) =>
+            Effect.runPromise(
+              client["server.db"]["db.documents.update"]({
+                params: { collection, id },
+                payload: { siteId, data: input.data, expectedVersion: input.expectedVersion },
+              }),
+            ),
+          delete: (id: string, input?: DbDeleteInput) =>
+            Effect.runPromise(
+              client["server.db"]["db.documents.delete"]({
+                params: { collection, id },
+                query: {
+                  siteId,
+                  expectedVersion: input?.expectedVersion,
+                },
+              }),
+            ),
+          subscribe: (handlers: Parameters<DbCollectionClient["subscribe"]>[0]) =>
+            createDbSubscription(normalizedBaseUrl, siteId, collection, handlers),
+        };
+      },
+    },
+  };
+}

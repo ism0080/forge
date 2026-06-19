@@ -3,16 +3,13 @@ import {
   DbCreateResponseSchema,
   DbDeleteResponseSchema,
   DbGetResponseSchema,
+  DbListQuerySchema,
   DbListResponseSchema,
   DbUpdateRequestSchema,
   DbUpdateResponseSchema,
 } from "@ism0080/forge-core";
 import { Schema } from "effect";
-import {
-  HttpApiEndpoint,
-  HttpApiGroup,
-  HttpApiSchema,
-} from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 const DbNotFoundError = Schema.Struct({
   error: Schema.Literal("document not found"),
@@ -36,16 +33,6 @@ const DbError = Schema.Union([
   DbBadRequestError,
   DbInternalError,
 ]);
-
-const DbListQuerySchema = Schema.Struct({
-  siteId: Schema.String,
-  limit: Schema.optional(Schema.NumberFromString),
-  cursor: Schema.optional(Schema.String),
-  whereField: Schema.optional(Schema.String),
-  whereValue: Schema.optional(Schema.String),
-  sortBy: Schema.optional(Schema.Literals(["createdAt", "updatedAt", "id"])),
-  sortDir: Schema.optional(Schema.Literals(["asc", "desc"])),
-});
 
 const DbDeleteQuerySchema = Schema.Struct({
   siteId: Schema.String,
