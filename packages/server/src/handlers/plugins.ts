@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api";
+import { Api } from "../api.js";
 import { plugins } from "../plugins.js";
 
 export const PluginsHandler = HttpApiBuilder.group(

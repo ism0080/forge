@@ -1,5 +1,5 @@
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api";
+import { Api } from "../api.js";
 import { Effect } from "effect";
 
 export const HealthHandler = HttpApiBuilder.group(Api, "server.health", (handlers) =>

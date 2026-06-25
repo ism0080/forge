@@ -1,9 +1,9 @@
 import { Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api";
+import { Api } from "../api.js";
 import { Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
-import { WebhookConfigService } from "../config/webhook";
+import { WebhookConfigService } from "../config/webhook.js";
 
 export const WebhookGatewayHandler = HttpApiBuilder.group(
   Api,

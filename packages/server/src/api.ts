@@ -1,11 +1,11 @@
 import { HttpApi, OpenApi } from "effect/unstable/httpapi";
-import { DbGroup } from "./groups/db";
-import { HealthGroup } from "./groups/health";
-import { IdentityGroup } from "./groups/identity";
-import { PluginsGroup } from "./groups/plugins";
-import { SitesGroup } from "./groups/sites";
-import { UploadGroup } from "./groups/upload";
-import { WebhookGatewayGroup } from "./groups/webhook";
+import { DbGroup } from "./groups/db.js";
+import { HealthGroup } from "./groups/health.js";
+import { IdentityGroup } from "./groups/identity.js";
+import { PluginsGroup } from "./groups/plugins.js";
+import { SitesGroup } from "./groups/sites.js";
+import { UploadGroup } from "./groups/upload.js";
+import { WebhookGatewayGroup } from "./groups/webhook.js";
 
 export const Api = HttpApi.make("server")
   .add(HealthGroup)

@@ -2,7 +2,7 @@ import type { DbDeleteInput, DbDocumentData, DbListQuery } from "@ism0080/forge-
 import { Effect } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api";
+import { Api } from "../api.js";
 import { DbEventsService } from "../services/db/events.js";
 import { DatabaseService } from "../services/db/service.js";
 

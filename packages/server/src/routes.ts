@@ -1,6 +1,6 @@
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "./api";
-import { handlers } from "./handlers";
+import { Api } from "./api.js";
+import { handlers } from "./handlers.js";
 import { Layer } from "effect";
 
 export const routes = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(

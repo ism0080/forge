@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api";
+import { Api } from "../api.js";
 import { AppConfigService } from "../config/server.js";
 import { StorageService } from "../services/storage/service.js";
 
