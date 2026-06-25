@@ -9,15 +9,15 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN nub install --frozen-lockfile
+RUN nub install
 
 FROM deps AS build
 
 COPY packages/core packages/core
 COPY packages/server packages/server
 
-RUN nub --filter @ism0080/forge-core build
-RUN nub --filter @ism0080/forge-server build
+RUN nub run --filter @ism0080/forge-core build
+RUN nub run --filter @ism0080/forge-server build
 
 FROM base AS prod-deps
 
@@ -25,7 +25,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN nub install --prod --filter @ism0080/forge-server... --frozen-lockfile
+RUN nub install --prod --filter @ism0080/forge-server...
 
 FROM node:25-alpine AS runtime
 
