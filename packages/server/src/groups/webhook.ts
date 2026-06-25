@@ -5,12 +5,10 @@ import {
 } from "@ism0080/forge-core";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-export const WebhookGatewayGroup = HttpApiGroup.make("server.webhook.gateway")
-  .prefix("/api")
-  .add(
-    HttpApiEndpoint.post("webhook.forward", "/webhook", {
-      success: WebhookSendSuccessResponseSchema,
-      error: WebhookSendErrorResponseSchema.pipe(HttpApiSchema.status("BadGateway")),
-      payload: WebhookSendInputSchema,
-    }),
-  );
+export const WebhookGatewayGroup = HttpApiGroup.make("server.webhook.gateway").add(
+  HttpApiEndpoint.post("webhook.forward", "/api/webhook", {
+    success: WebhookSendSuccessResponseSchema,
+    error: WebhookSendErrorResponseSchema.pipe(HttpApiSchema.status("BadGateway")),
+    payload: WebhookSendInputSchema,
+  }),
+);

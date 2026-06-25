@@ -17,12 +17,10 @@ const UploadResponseSchema = Schema.Struct({
   key: Schema.String,
 }).pipe(HttpApiSchema.status("Created"));
 
-export const UploadGroup = HttpApiGroup.make("server.upload")
-  .prefix("/api")
-  .add(
-    HttpApiEndpoint.post("upload.create", "/upload", {
-      success: UploadResponseSchema,
-      error: UploadInternalError,
-      payload: UploadPayloadSchema,
-    }),
-  );
+export const UploadGroup = HttpApiGroup.make("server.upload").add(
+  HttpApiEndpoint.post("upload.create", "/api/upload", {
+    success: UploadResponseSchema,
+    error: UploadInternalError,
+    payload: UploadPayloadSchema,
+  }),
+);

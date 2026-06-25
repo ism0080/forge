@@ -15,10 +15,8 @@ const PluginsResponseSchema = Schema.Struct({
   plugins: Schema.Array(PluginDescriptorSchema),
 });
 
-export const PluginsGroup = HttpApiGroup.make("server.plugins")
-  .prefix("/api")
-  .add(
-    HttpApiEndpoint.get("plugins.list", "/plugins", {
-      success: PluginsResponseSchema,
-    }),
-  );
+export const PluginsGroup = HttpApiGroup.make("server.plugins").add(
+  HttpApiEndpoint.get("plugins.list", "/api/plugins", {
+    success: PluginsResponseSchema,
+  }),
+);

@@ -15,11 +15,9 @@ const WhoamiResponseSchema = Schema.Struct({
   team: Schema.String,
 });
 
-export const IdentityGroup = HttpApiGroup.make("server.identity")
-  .prefix("/api")
-  .add(
-    HttpApiEndpoint.get("identity.whoami", "/whoami", {
-      success: WhoamiResponseSchema,
-      headers: WhoamiHeadersSchema,
-    }),
-  );
+export const IdentityGroup = HttpApiGroup.make("server.identity").add(
+  HttpApiEndpoint.get("identity.whoami", "/api/whoami", {
+    success: WhoamiResponseSchema,
+    headers: WhoamiHeadersSchema,
+  }),
+);

@@ -39,44 +39,42 @@ const DbDeleteQuerySchema = Schema.Struct({
   expectedVersion: Schema.optional(Schema.NumberFromString),
 });
 
-export const DbGroup = HttpApiGroup.make("server.db")
-  .prefix("/api")
-  .add(
-    HttpApiEndpoint.get("db.events.get", "/db/events", {
-      success: HttpApiSchema.NoContent,
-      query: Schema.Struct({
-        siteId: Schema.String,
-        collection: Schema.optional(Schema.String),
-      }),
+export const DbGroup = HttpApiGroup.make("server.db").add(
+  HttpApiEndpoint.get("db.events.get", "/api/db/events", {
+    success: HttpApiSchema.NoContent,
+    query: Schema.Struct({
+      siteId: Schema.String,
+      collection: Schema.optional(Schema.String),
     }),
-    HttpApiEndpoint.get("db.documents.list", "/db/:collection", {
-      success: DbListResponseSchema,
-      error: DbError,
-      params: Schema.Struct({ collection: Schema.String }),
-      query: DbListQuerySchema,
-    }),
-    HttpApiEndpoint.get("db.documents.get", "/db/:collection/:id", {
-      success: DbGetResponseSchema,
-      error: DbError,
-      params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
-      query: Schema.Struct({ siteId: Schema.String }),
-    }),
-    HttpApiEndpoint.post("db.documents.create", "/db/:collection", {
-      success: DbCreateResponseSchema.pipe(HttpApiSchema.status("Created")),
-      error: DbError,
-      params: Schema.Struct({ collection: Schema.String }),
-      payload: DbCreateRequestSchema,
-    }),
-    HttpApiEndpoint.put("db.documents.update", "/db/:collection/:id", {
-      success: DbUpdateResponseSchema,
-      error: DbError,
-      params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
-      payload: DbUpdateRequestSchema,
-    }),
-    HttpApiEndpoint.delete("db.documents.delete", "/db/:collection/:id", {
-      success: DbDeleteResponseSchema,
-      error: DbError,
-      params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
-      query: DbDeleteQuerySchema,
-    }),
-  );
+  }),
+  HttpApiEndpoint.get("db.documents.list", "/api/db/:collection", {
+    success: DbListResponseSchema,
+    error: DbError,
+    params: Schema.Struct({ collection: Schema.String }),
+    query: DbListQuerySchema,
+  }),
+  HttpApiEndpoint.get("db.documents.get", "/api/db/:collection/:id", {
+    success: DbGetResponseSchema,
+    error: DbError,
+    params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
+    query: Schema.Struct({ siteId: Schema.String }),
+  }),
+  HttpApiEndpoint.post("db.documents.create", "/api/db/:collection", {
+    success: DbCreateResponseSchema.pipe(HttpApiSchema.status("Created")),
+    error: DbError,
+    params: Schema.Struct({ collection: Schema.String }),
+    payload: DbCreateRequestSchema,
+  }),
+  HttpApiEndpoint.put("db.documents.update", "/api/db/:collection/:id", {
+    success: DbUpdateResponseSchema,
+    error: DbError,
+    params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
+    payload: DbUpdateRequestSchema,
+  }),
+  HttpApiEndpoint.delete("db.documents.delete", "/api/db/:collection/:id", {
+    success: DbDeleteResponseSchema,
+    error: DbError,
+    params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
+    query: DbDeleteQuerySchema,
+  }),
+);
