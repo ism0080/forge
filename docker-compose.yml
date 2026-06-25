@@ -13,6 +13,7 @@ services:
       - forge-data:/app/data
     ports:
       - "8787:8787"
+    env_file: .env
 
   nginx:
     image: nginx:1.27-alpine
