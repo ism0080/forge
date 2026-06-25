@@ -1,7 +1,7 @@
 FROM node:25-alpine AS base
 
 WORKDIR /app
-RUN npm install -g pnpm
+RUN npm install -g --ignore-scripts=false @nubjs/nub
 
 FROM base AS deps
 
@@ -9,15 +9,15 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN pnpm install --frozen-lockfile
+RUN nub install --frozen-lockfile
 
 FROM deps AS build
 
 COPY packages/core packages/core
 COPY packages/server packages/server
 
-RUN pnpm --filter @ism0080/forge-core build
-RUN pnpm --filter @ism0080/forge-server build
+RUN nub --filter @ism0080/forge-core build
+RUN nub --filter @ism0080/forge-server build
 
 FROM base AS prod-deps
 
@@ -25,7 +25,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN pnpm install --prod --filter @ism0080/forge-server... --frozen-lockfile
+RUN nub install --prod --filter @ism0080/forge-server... --frozen-lockfile
 
 FROM node:25-alpine AS runtime
 
