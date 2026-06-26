@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { DEFAULT_CONFIG, type ForgeConfig } from "@ism0080/forge-core";
+import { createClient } from "@ism0080/forge-sdk";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
@@ -48,6 +49,16 @@ const writeDefaultSite = (siteId: string) =>
 
 const apiBaseFromEnv = (): string => process.env.FORGE_API_BASE_URL ?? DEFAULT_CONFIG.apiBaseUrl;
 
+const makeClient = (options: { apiBaseUrl: string; siteId?: string }) =>
+  Effect.tryPromise({
+    try: () =>
+      createClient({
+        baseUrl: options.apiBaseUrl,
+        ...(options.siteId ? { siteId: options.siteId } : {}),
+      }),
+    catch: (error) => new Error(`Unable to create forge client: ${String(error)}`),
+  });
+
 const collectFiles = (
   root: string,
 ): Effect.Effect<Array<string>, Error, FileSystem.FileSystem | Path.Path> =>
@@ -79,42 +90,6 @@ const collectFiles = (
       }
     }
     return out;
-  });
-
-const uploadFile = (config: ForgeConfig, filePath: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const data = yield* fs
-      .readFile(filePath)
-      .pipe(
-        Effect.mapError((error) => new Error(`Unable to read file ${filePath}: ${String(error)}`)),
-      );
-    const relative = path.relative(path.join(cwd, config.entry), filePath).replaceAll("\\", "/");
-    const response = yield* Effect.tryPromise({
-      try: () =>
-        fetch(`${config.apiBaseUrl}/api/upload`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            siteId: config.siteId,
-            path: relative,
-            contentBase64: Buffer.from(data).toString("base64"),
-          }),
-        }),
-      catch: (error) => new Error(String(error)),
-    });
-    if (!response.ok) {
-      const body = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: (error) => new Error(String(error)),
-      });
-      return yield* Effect.fail(
-        new Error(`Upload failed for ${relative}: ${response.status} ${body}`),
-      );
-    }
   });
 
 const init = Command.make(
@@ -158,6 +133,7 @@ const deploy = Command.make(
   },
   Effect.fn(function* ({ folder, siteId }) {
     const path = yield* Path.Path;
+    const fs = yield* FileSystem.FileSystem;
     const folderArg = Option.getOrUndefined(folder);
     const siteIdArg = Option.getOrUndefined(siteId);
     const config: ForgeConfig =
@@ -169,12 +145,22 @@ const deploy = Command.make(
             spa: true,
           }
         : yield* readConfig();
+    const client = yield* makeClient(config);
     const root = path.join(cwd, config.entry);
     const files = yield* collectFiles(root);
 
     for (const filePath of files) {
-      yield* uploadFile(config, filePath);
+      const data = yield* fs
+        .readFile(filePath)
+        .pipe(
+          Effect.mapError((error) => new Error(`Unable to read file ${filePath}: ${String(error)}`)),
+        );
       const rel = path.relative(root, filePath).replaceAll("\\", "/");
+      yield* Effect.tryPromise({
+        try: () =>
+          client.upload({ path: rel, contentBase64: Buffer.from(data).toString("base64") }),
+        catch: (error) => new Error(`Upload failed for ${rel}: ${String(error)}`),
+      });
       yield* Effect.log(`uploaded ${rel}`);
     }
 
@@ -186,23 +172,11 @@ const whoami = Command.make(
   "whoami",
   {},
   Effect.fn(function* () {
-    const response = yield* Effect.tryPromise({
-      try: () => fetch(`${apiBaseFromEnv()}/api/whoami`),
+    const client = yield* makeClient({ apiBaseUrl: apiBaseFromEnv() });
+    const profile = yield* Effect.tryPromise({
+      try: () => client.whoami(),
       catch: (error) => new Error(`whoami failed: ${String(error)}`),
     });
-
-    if (!response.ok) {
-      const body = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: () => "",
-      });
-      return yield* Effect.fail(new Error(`whoami failed: ${response.status} ${body}`));
-    }
-
-    const profile = (yield* Effect.tryPromise({
-      try: () => response.json() as Promise<Record<string, string>>,
-      catch: (error) => new Error(`Invalid whoami payload: ${String(error)}`),
-    })) as Record<string, string>;
 
     yield* Effect.log(`${profile.name} <${profile.email}> (${profile.team})`);
   }),
@@ -212,28 +186,11 @@ const pluginsList = Command.make(
   "list",
   {},
   Effect.fn(function* () {
-    const response = yield* Effect.tryPromise({
-      try: () => fetch(`${apiBaseFromEnv()}/api/plugins`),
+    const client = yield* makeClient({ apiBaseUrl: apiBaseFromEnv() });
+    const payload = yield* Effect.tryPromise({
+      try: () => client.plugins.list(),
       catch: (error) => new Error(`plugins failed: ${String(error)}`),
     });
-
-    if (!response.ok) {
-      const body = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: () => "",
-      });
-      return yield* Effect.fail(new Error(`plugins failed: ${response.status} ${body}`));
-    }
-
-    const payload = (yield* Effect.tryPromise({
-      try: () =>
-        response.json() as Promise<{
-          plugins: Array<{ id: string; capabilities: Array<{ id: string }> }>;
-        }>,
-      catch: (error) => new Error(`Invalid plugins payload: ${String(error)}`),
-    })) as {
-      plugins: Array<{ id: string; capabilities: Array<{ id: string }> }>;
-    };
 
     for (const plugin of payload.plugins) {
       const caps = plugin.capabilities.map((capability) => capability.id).join(", ");
