@@ -24,6 +24,10 @@ export interface PluginDescriptor {
   readonly capabilities: ReadonlyArray<CapabilityDescriptor>;
 }
 
+export interface PluginsListResponse {
+  readonly plugins: ReadonlyArray<PluginDescriptor>;
+}
+
 export interface S3ObjectRef {
   readonly bucket: string;
   readonly key: string;
@@ -34,6 +38,17 @@ export interface PutObjectInput {
   readonly key: string;
   readonly body: Uint8Array;
   readonly contentType?: string;
+}
+
+export interface UploadInput {
+  readonly path: string;
+  readonly contentBase64: string;
+  readonly contentType?: string;
+}
+
+export interface UploadResponse {
+  readonly ok: true;
+  readonly key: string;
 }
 
 export type DbValue =
