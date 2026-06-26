@@ -5,6 +5,7 @@ import type {
   DbDocument,
   DbListQuery,
   DbUpdateInput,
+  UploadInput,
   WebhookSendInput,
 } from "@ism0080/forge-core";
 import { Effect } from "effect";
@@ -14,7 +15,7 @@ import { Api } from "@ism0080/forge-server/api";
 
 export interface ForgeClientOptions {
   readonly baseUrl: string;
-  readonly siteId: string;
+  readonly siteId?: string;
 }
 
 const ensureNoLeadingSlash = (value: string): string => value.replace(/^\/+/, "");
@@ -85,7 +86,7 @@ const createDbSubscription = (
   };
 };
 
-export async function createClient({ baseUrl, siteId }: ForgeClientOptions) {
+export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions) {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const client = await Effect.runPromise(
     HttpApiClient.make(Api, { baseUrl: normalizedBaseUrl }).pipe(
@@ -142,6 +143,22 @@ export async function createClient({ baseUrl, siteId }: ForgeClientOptions) {
             createDbSubscription(normalizedBaseUrl, siteId, collection, handlers),
         };
       },
+    },
+    upload: (input: UploadInput) =>
+      Effect.runPromise(
+        client["server.upload"]["upload.create"]({
+          payload: {
+            siteId,
+            path: input.path,
+            contentBase64: input.contentBase64,
+            ...(input.contentType ? { contentType: input.contentType } : {}),
+          },
+        }),
+      ),
+    whoami: () =>
+      Effect.runPromise(client["server.identity"]["identity.whoami"]({ headers: {} })),
+    plugins: {
+      list: () => Effect.runPromise(client["server.plugins"]["plugins.list"]({})),
     },
   };
 }
