@@ -1,6 +1,7 @@
 import {
   DbCreateRequestSchema,
   DbCreateResponseSchema,
+  DbDeleteRequestSchema,
   DbDeleteResponseSchema,
   DbGetResponseSchema,
   DbListQuerySchema,
@@ -33,11 +34,6 @@ const DbError = Schema.Union([
   DbBadRequestError,
   DbInternalError,
 ]);
-
-const DbDeleteQuerySchema = Schema.Struct({
-  siteId: Schema.String,
-  expectedVersion: Schema.optional(Schema.NumberFromString),
-});
 
 export const DbGroup = HttpApiGroup.make("server.db").add(
   HttpApiEndpoint.get("db.events.get", "/api/db/events", {
@@ -75,6 +71,6 @@ export const DbGroup = HttpApiGroup.make("server.db").add(
     success: DbDeleteResponseSchema,
     error: DbError,
     params: Schema.Struct({ collection: Schema.String, id: Schema.String }),
-    query: DbDeleteQuerySchema,
+    query: DbDeleteRequestSchema,
   }),
 );

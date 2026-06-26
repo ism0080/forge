@@ -1,22 +1,8 @@
-import { Schema } from "effect";
+import { PluginsListResponseSchema } from "@ism0080/forge-core";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
-
-const CapabilityDescriptorSchema = Schema.Struct({
-  id: Schema.String,
-  description: Schema.String,
-});
-
-const PluginDescriptorSchema = Schema.Struct({
-  id: Schema.String,
-  capabilities: Schema.Array(CapabilityDescriptorSchema),
-});
-
-const PluginsResponseSchema = Schema.Struct({
-  plugins: Schema.Array(PluginDescriptorSchema),
-});
 
 export const PluginsGroup = HttpApiGroup.make("server.plugins").add(
   HttpApiEndpoint.get("plugins.list", "/api/plugins", {
-    success: PluginsResponseSchema,
+    success: PluginsListResponseSchema,
   }),
 );
