@@ -203,7 +203,7 @@ const normalizeListQuery = (query?: DbListQuery): DbListQuery | undefined => {
   };
 };
 
-export const createClient = (options: ForgeClientOptions): ForgeClient => {
+export const createClientV1 = (options: ForgeClientOptions): ForgeClient => {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
 
   return {
@@ -293,7 +293,8 @@ export const createClient = (options: ForgeClientOptions): ForgeClient => {
             await assertOk(response);
             await parseJson<DbDeleteResponse>(response);
           },
-          subscribe: (handlers) => createDbSubscription(baseUrl, options.siteId, collection, handlers),
+          subscribe: (handlers) =>
+            createDbSubscription(baseUrl, options.siteId, collection, handlers),
         };
       },
     },
@@ -360,3 +361,14 @@ export async function createClientV2({ baseUrl, siteId }: ForgeClientOptions) {
     },
   };
 }
+
+export const createClient = ({
+  _version = "v2",
+  ...options
+}: ForgeClientOptions & { _version: "v1" | "v2" }) => {
+  if (_version === "v1") {
+    return createClientV1(options);
+  }
+
+  return createClientV2(options);
+};
