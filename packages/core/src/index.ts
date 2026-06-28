@@ -8,14 +8,6 @@ export const ForgeConfigSchema = Schema.Struct({
 });
 export type ForgeConfig = Schema.Schema.Type<typeof ForgeConfigSchema>;
 
-export const IdentitySchema = Schema.Struct({
-  id: Schema.String,
-  email: Schema.String,
-  name: Schema.String,
-  team: Schema.String,
-});
-export type Identity = Schema.Schema.Type<typeof IdentitySchema>;
-
 export const CapabilityDescriptorSchema = Schema.Struct({
   id: Schema.String,
   description: Schema.String,

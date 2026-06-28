@@ -1,11 +1,12 @@
 # Forge
 
-This repository is a minimal Quick-like internal platform scaffold:
+Forge is a local-first toolkit for building small, mobile-friendly web apps and PWAs. It keeps everything on your machine: a local dev server, filesystem storage, and a CLI that scaffolds projects from templates.
 
-- `packages/server`: Effect-based API with plugin registry and local filesystem storage adapter
-- `packages/cli`: `forge` CLI (`init`, `deploy`, `whoami`, `plugins list`, `dev`)
+- `packages/server`: Effect-based local API with filesystem storage and a simple document database
+- `packages/cli`: `forge` CLI (`init`, `deploy`, `plugins list`, `dev`) with project templates
+- `packages/templates`: starter templates used by `forge init`
 - `packages/core`: shared types and configuration contracts
-- `packages/sdk`: reusable SDK (`createClient`) for DB and webhook interactions
+- `packages/sdk`: reusable SDK (`createClient`) for DB, uploads, and webhooks
 - `packages/vite-plugin`: Vite plugin that injects `forge.json` values through `virtual:forge`
 - `docker-compose.yml`: local stack with API, persistent local storage, and NGINX
 
@@ -39,14 +40,30 @@ Services:
 - API: `http://localhost:8787`
 - NGINX: `http://localhost:8880`
 
+## Templates
+
+`forge init` scaffolds a new project from a template in `packages/templates`:
+
+```bash
+forge init my-app
+forge init --template pwa my-app
+```
+
+Available templates:
+
+- `default`: minimal Vite + TypeScript site with oxlint, oxfmt, and Forge SDK
+- `pwa`: React PWA starter with Vite, Tailwind CSS v4, [TanStack Query](https://tanstack.com/query), [TanStack Router](https://tanstack.com/router), [vite-plugin-pwa](https://vite-pwa-org.netlify.app/), and [coss ui](https://coss.com/ui)
+
+Lint/format config (`.oxlintrc.json`, `.gitignore`) is shared from `packages/templates/src/shared`, while `tsconfig.json` and `package.json` are template-specific. Generated apps extend `@total-typescript/tsconfig/bundler/dom/app`.
+
 ## Build and run CLI
 
 ```bash
 pnpm --filter @ism0080/forge-cli build
 node packages/cli/dist/index.js init demo
+node packages/cli/dist/index.js init --template pwa demo
 node packages/cli/dist/index.js deploy
 node packages/cli/dist/index.js deploy ./dist demo
-node packages/cli/dist/index.js whoami
 node packages/cli/dist/index.js plugins list
 node packages/cli/dist/index.js dev
 ```
@@ -134,9 +151,8 @@ const result = await client.webhook({
 });
 ```
 
-## Identity and health
+## Health
 
-- `GET /api/whoami` returns the trusted user identity. In local development it falls back to a dev profile unless the request includes `X-Forge-User-*` headers.
 - `GET /health` returns `{ ok: true }`.
 
 ## Multiple sites via subdomain

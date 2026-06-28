@@ -1,7 +1,6 @@
 import { Layer } from "effect";
 import { DbHandler } from "./handlers/db.js";
 import { HealthHandler } from "./handlers/health.js";
-import { IdentityHandler } from "./handlers/identity.js";
 import { PluginsHandler } from "./handlers/plugins.js";
 import { SitesHandler } from "./handlers/sites.js";
 import { UploadHandler } from "./handlers/upload.js";
@@ -14,5 +13,4 @@ export const handlers = Layer.mergeAll(
   SitesHandler,
   UploadHandler,
   PluginsHandler,
-  IdentityHandler,
 );

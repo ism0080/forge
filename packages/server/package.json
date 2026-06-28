@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    "api": {
+    "./api": {
       "types": "./dist/api.d.ts",
       "import": "./dist/api.js"
     }

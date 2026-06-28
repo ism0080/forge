@@ -1,0 +1,16 @@
+{
+  "name": "@ism0080/forge-templates",
+  "version": "0.1.3",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b && rm -rf dist/template-files dist/shared && cp -r src/template-files dist/template-files && cp -r src/shared dist/shared",
+    "typecheck": "tsc -b --pretty false",
+    "publish:local": "pnpm build && pnpm publish --registry http://localhost:4873 --no-git-checks --tag local"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3"
+  }
+}

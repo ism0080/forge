@@ -1,0 +1,25 @@
+{
+  "name": "{{siteId}}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@ism0080/forge-sdk": "latest"
+  },
+  "devDependencies": {
+    "@ism0080/forge-vite-plugin": "latest",
+    "@total-typescript/tsconfig": "^1.0.4",
+    "oxfmt": "^0.54.0",
+    "oxlint": "^1.69.0",
+    "typescript": "^5.8.3",
+    "vite": "^8.0.0"
+  }
+}

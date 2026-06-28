@@ -1,0 +1,59 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: var(--color-white);
+  --color-foreground: var(--color-neutral-800);
+  --color-primary: var(--color-neutral-800);
+  --color-primary-foreground: var(--color-neutral-50);
+  --color-secondary: color-mix(in srgb, var(--color-black) 4%, transparent);
+  --color-secondary-foreground: var(--color-neutral-800);
+  --color-accent: color-mix(in srgb, var(--color-black) 4%, transparent);
+  --color-accent-foreground: var(--color-neutral-800);
+  --color-muted: color-mix(in srgb, var(--color-black) 4%, transparent);
+  --color-muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
+  --color-popover: var(--color-white);
+  --color-popover-foreground: var(--color-neutral-800);
+  --color-card: var(--color-white);
+  --color-card-foreground: var(--color-neutral-800);
+  --color-border: color-mix(in srgb, var(--color-black) 8%, transparent);
+  --color-input: color-mix(in srgb, var(--color-black) 10%, transparent);
+  --color-ring: var(--color-neutral-400);
+  --color-destructive: var(--color-red-500);
+  --color-destructive-foreground: var(--color-red-700);
+  --radius-lg: 0.625rem;
+  --radius-md: calc(var(--radius-lg) - 2px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+    --color-foreground: var(--color-neutral-100);
+    --color-primary: var(--color-neutral-100);
+    --color-primary-foreground: var(--color-neutral-800);
+    --color-secondary: color-mix(in srgb, var(--color-white) 4%, transparent);
+    --color-secondary-foreground: var(--color-neutral-100);
+    --color-accent: color-mix(in srgb, var(--color-white) 4%, transparent);
+    --color-accent-foreground: var(--color-neutral-100);
+    --color-muted: color-mix(in srgb, var(--color-white) 4%, transparent);
+    --color-muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+    --color-popover: color-mix(in srgb, var(--color-background) 98%, var(--color-white));
+    --color-popover-foreground: var(--color-neutral-100);
+    --color-card: color-mix(in srgb, var(--color-background) 98%, var(--color-white));
+    --color-card-foreground: var(--color-neutral-100);
+    --color-border: color-mix(in srgb, var(--color-white) 6%, transparent);
+    --color-input: color-mix(in srgb, var(--color-white) 8%, transparent);
+    --color-ring: var(--color-neutral-500);
+    --color-destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
+    --color-destructive-foreground: var(--color-red-400);
+  }
+}

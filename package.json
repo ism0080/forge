@@ -21,6 +21,7 @@
     "oxlint": "^1.69.0"
   },
   "devDependencies": {
+    "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.9.3",
     "typescript": "^5.8.3"
   },

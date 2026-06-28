@@ -8,5 +8,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../sdk" }]
+  "references": [{ "path": "../core" }, { "path": "../templates" }, { "path": "../sdk" }]
 }

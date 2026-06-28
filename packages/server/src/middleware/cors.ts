@@ -4,15 +4,7 @@ export const CorsMiddleware = HttpRouter.middleware(
   HttpMiddleware.cors({
     allowedOrigins: [],
     allowedMethods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "X-Forge-User-Id",
-      "X-Forge-User-Email",
-      "X-Forge-User-Name",
-      "X-Forge-User-Team",
-    ],
+    allowedHeaders: ["Content-Type", "X-Requested-With"],
     credentials: true,
     maxAge: 86400,
   }),

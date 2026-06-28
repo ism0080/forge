@@ -1,21 +1,13 @@
 {
+  "extends": "@total-typescript/tsconfig/tsc/no-dom/library-monorepo",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "preserve",
-    "moduleResolution": "bundler",
     "paths": {
       "@ism0080/forge-core": ["./packages/core/src/index.ts"],
       "@ism0080/forge-sdk": ["./packages/sdk/src/index.ts"],
       "@ism0080/forge-server/api": ["./packages/server/src/api.ts"],
+      "@ism0080/forge-templates": ["./packages/templates/src/index.ts"],
       "@ism0080/forge-vite-plugin": ["./packages/vite-plugin/src/index.ts"]
     },
-    "strict": true,
-    "declaration": true,
-    "sourceMap": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true
   }

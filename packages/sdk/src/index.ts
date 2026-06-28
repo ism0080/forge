@@ -155,8 +155,6 @@ export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions)
           },
         }),
       ),
-    whoami: () =>
-      Effect.runPromise(client["server.identity"]["identity.whoami"]({ headers: {} })),
     plugins: {
       list: () => Effect.runPromise(client["server.plugins"]["plugins.list"]({})),
     },

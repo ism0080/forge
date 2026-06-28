@@ -7,10 +7,12 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { DEFAULT_CONFIG, type ForgeConfig } from "@ism0080/forge-core";
 import { createClient } from "@ism0080/forge-sdk";
+import { getTemplate, templates } from "@ism0080/forge-templates";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
 import * as Argument from "effect/unstable/cli/Argument";
+import * as Flag from "effect/unstable/cli/Flag";
 
 const cwd = process.cwd();
 const configPath = `${cwd}/forge.json`;
@@ -24,27 +26,33 @@ const readConfig = () =>
     return JSON.parse(raw) as ForgeConfig;
   });
 
-const writeDefaultSite = (siteId: string) =>
+const scaffoldTemplate = (siteId: string, templateId: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const indexPath = path.join(cwd, "index.html");
-    const content = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${siteId}</title>
-  </head>
-  <body>
-    <h1>${siteId}</h1>
-    <p>Powered by forge.</p>
-  </body>
-</html>
-`;
-    yield* fs
-      .writeFileString(indexPath, content)
-      .pipe(Effect.mapError((error) => new Error(`Unable to write index.html: ${String(error)}`)));
+    const template = getTemplate(templateId);
+
+    if (!template) {
+      const available = templates.map((t) => t.id).join(", ");
+      return yield* Effect.fail(
+        new Error(`Unknown template '${templateId}'. Available: ${available}`),
+      );
+    }
+
+    for (const file of template.files) {
+      const filePath = path.join(cwd, file.path);
+      const directory = path.dirname(filePath);
+      const exists = yield* fs.exists(directory).pipe(Effect.orElseSucceed(() => false));
+      if (!exists) {
+        yield* fs.makeDirectory(directory, { recursive: true }).pipe(
+          Effect.mapError((error) => new Error(`Unable to create directory ${directory}: ${String(error)}`)),
+        );
+      }
+      const content = file.content.replace(/\{\{siteId\}\}/g, siteId);
+      yield* fs
+        .writeFileString(filePath, content)
+        .pipe(Effect.mapError((error) => new Error(`Unable to write ${file.path}: ${String(error)}`)));
+    }
   });
 
 const apiBaseFromEnv = (): string => process.env.FORGE_API_BASE_URL ?? DEFAULT_CONFIG.apiBaseUrl;
@@ -96,8 +104,9 @@ const init = Command.make(
   "init",
   {
     siteId: Argument.string("site-id").pipe(Argument.optional),
+    template: Flag.string("template").pipe(Flag.withDefault("default")),
   },
-  Effect.fn(function* ({ siteId }) {
+  Effect.fn(function* ({ siteId, template }) {
     const path = yield* Path.Path;
     const fs = yield* FileSystem.FileSystem;
     const resolvedSiteId = Option.getOrElse(siteId, () => path.basename(cwd));
@@ -112,13 +121,12 @@ const init = Command.make(
       .writeFileString(configPath, `${JSON.stringify(config, null, 2)}\n`)
       .pipe(Effect.mapError((error) => new Error(`Unable to write forge.json: ${String(error)}`)));
 
-    const hasIndex = yield* Effect.matchEffect(fs.exists(path.join(cwd, "index.html")), {
-      onFailure: () => Effect.succeed(false),
-      onSuccess: (exists) => Effect.succeed(exists),
-    });
+    const hasIndex = yield* fs.exists(path.join(cwd, "index.html")).pipe(
+      Effect.orElseSucceed(() => false),
+    );
 
     if (!hasIndex) {
-      yield* writeDefaultSite(resolvedSiteId);
+      yield* scaffoldTemplate(resolvedSiteId, template);
     }
 
     yield* Effect.log(`Initialized forge site '${resolvedSiteId}' with ${configPath}`);
@@ -168,20 +176,6 @@ const deploy = Command.make(
   }),
 ).pipe(Command.withDescription("Deploy local files to the forge API"));
 
-const whoami = Command.make(
-  "whoami",
-  {},
-  Effect.fn(function* () {
-    const client = yield* makeClient({ apiBaseUrl: apiBaseFromEnv() });
-    const profile = yield* Effect.tryPromise({
-      try: () => client.whoami(),
-      catch: (error) => new Error(`whoami failed: ${String(error)}`),
-    });
-
-    yield* Effect.log(`${profile.name} <${profile.email}> (${profile.team})`);
-  }),
-).pipe(Command.withDescription("Show current forge identity"));
-
 const pluginsList = Command.make(
   "list",
   {},
@@ -227,7 +221,7 @@ const dev = Command.make(
 
 const cli = Command.make("forge").pipe(
   Command.withDescription("Forge CLI"),
-  Command.withSubcommands([init, deploy, whoami, plugins, dev]),
+  Command.withSubcommands([init, deploy, plugins, dev]),
 );
 
 Command.run(cli, { version: "0.1.0" }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
