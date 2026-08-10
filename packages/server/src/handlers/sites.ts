@@ -1,9 +1,14 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "../api.js";
 import { AppConfigService } from "../config/server.js";
 import { StorageService } from "../services/storage/service.js";
+
+class SiteAssetNotFoundError extends Schema.TaggedErrorClass<SiteAssetNotFoundError>()(
+  "SiteAssetNotFoundError",
+  {},
+) {}
 
 const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
   const siteIds = Array.from(
@@ -152,10 +157,10 @@ export const SitesHandler = HttpApiBuilder.group(Api, "server.sites", (handlers)
 
         const readFirst = (
           candidates: ReadonlyArray<string>,
-        ): Effect.Effect<{ key: string; bytes: Uint8Array }, Error> => {
+        ): Effect.Effect<{ key: string; bytes: Uint8Array }, SiteAssetNotFoundError> => {
           const [head, ...tail] = candidates;
           if (!head) {
-            return Effect.fail(new Error("site asset not found"));
+            return Effect.fail(new SiteAssetNotFoundError({}));
           }
           return Effect.matchEffect(storage.getObject(siteBucket, head), {
             onSuccess: (bytes) => Effect.succeed({ key: head, bytes }),

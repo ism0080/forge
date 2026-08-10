@@ -1,13 +1,23 @@
-import { Config, Context, Effect, Layer } from "effect";
+import { Config, Context, Effect, Layer, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import {
+  CollectionId,
+  DbDocumentFromJson,
+  DocumentId,
+  DocumentNotFoundError,
+  DbOperationError,
+  SiteId,
+  VersionConflictError,
+} from "@ism0080/forge-core";
 import type {
+  DbCreateInput,
   DbDeleteInput,
   DbDocument,
-  DbDocumentData,
   DbListQuery,
   DbSortBy,
   DbSortDir,
+  DbUpdateInput,
 } from "@ism0080/forge-core";
 import { type DatabaseApi, DatabaseService } from "./service.js";
 import { DbEventsService } from "./events.js";
@@ -99,11 +109,16 @@ const matchesWhere = (document: DbDocument, query?: DbListQuery): boolean => {
   return false;
 };
 
-const parseDocument = (raw: string): Effect.Effect<DbDocument, Error> =>
-  Effect.try({
-    try: () => JSON.parse(raw) as DbDocument,
-    catch: (error) => new Error(`invalid db document: ${String(error)}`),
-  });
+const parseDocument = (raw: string): Effect.Effect<DbDocument, DbOperationError> =>
+  Schema.decodeUnknownEffect(DbDocumentFromJson)(raw).pipe(
+    Effect.mapError(
+      (error) =>
+        new DbOperationError({
+          operation: "parseDocument",
+          cause: error,
+        }),
+    ),
+  );
 
 const make = Effect.gen(function* () {
   const config = yield* LocalFileDatabaseConfigService;
@@ -119,42 +134,65 @@ const make = Effect.gen(function* () {
   const documentPath = (siteId: string, collection: string, id: string): string =>
     path.join(collectionPath(siteId, collection), `${cleanSegment(id)}.json`);
 
-  const readDocument = (
-    siteId: string,
-    collection: string,
-    id: string,
-  ): Effect.Effect<DbDocument, Error> =>
-    Effect.gen(function* () {
-      const fullPath = documentPath(siteId, collection, id);
-      const exists = yield* fs.exists(fullPath).pipe(Effect.orElseSucceed(() => false));
-      if (!exists) {
-        return yield* Effect.fail(new Error("document not found"));
-      }
-      const raw = yield* fs.readFileString(fullPath);
-      return yield* parseDocument(raw);
-    });
-
-  const writeDocument = (
-    siteId: string,
-    collection: string,
-    document: DbDocument,
-  ): Effect.Effect<void, Error> =>
-    Effect.gen(function* () {
-      const fullPath = documentPath(siteId, collection, document.id);
-      yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
-      yield* fs.writeFileString(fullPath, `${JSON.stringify(document)}\n`);
-    });
-
-  return {
-    createDocument: (siteId, collection, input) =>
+  const readDocument = Effect.fn("Database.readDocument")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      id: DocumentId,
+    ): Effect.Effect<DbDocument, DocumentNotFoundError | DbOperationError> =>
       Effect.gen(function* () {
-        const id = input.id ? cleanSegment(input.id) : randomId();
+        const fullPath = documentPath(siteId, collection, id);
+        const exists = yield* fs.exists(fullPath).pipe(Effect.orElseSucceed(() => false));
+        if (!exists) {
+          return yield* new DocumentNotFoundError({ siteId, collection, id });
+        }
+        const raw = yield* fs.readFileString(fullPath);
+        return yield* parseDocument(raw);
+      }).pipe(
+        Effect.catchIf(
+          (error) => !(error instanceof DocumentNotFoundError),
+          (error) =>
+            Effect.fail(
+              new DbOperationError({
+                operation: "readDocument",
+                cause: error,
+              }),
+            ),
+        ),
+      ),
+  );
+
+  const writeDocument = Effect.fn("Database.writeDocument")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      document: DbDocument,
+    ): Effect.Effect<void, DbOperationError> =>
+      Effect.gen(function* () {
+        const fullPath = documentPath(siteId, collection, document.id);
+        yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
+        yield* fs.writeFileString(fullPath, `${JSON.stringify(document)}\n`);
+      }).pipe(
+        Effect.mapError(
+          (error) => new DbOperationError({ operation: "writeDocument", cause: error }),
+        ),
+      ),
+  );
+
+  const createDocument = Effect.fn("Database.createDocument")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      input: DbCreateInput,
+    ): Effect.Effect<DbDocument, DbOperationError> =>
+      Effect.gen(function* () {
+        const id = input.id ?? DocumentId.make(randomId());
         const createdAt = nowIso();
         const document: DbDocument = {
           id,
           siteId,
           collection,
-          data: input.data as DbDocumentData,
+          data: input.data,
           version: 1,
           createdAt,
           updatedAt: createdAt,
@@ -173,8 +211,22 @@ const make = Effect.gen(function* () {
         });
 
         return document;
-      }).pipe(Effect.mapError((error) => new Error(`createDocument failed: ${String(error)}`))),
-    listDocuments: (siteId, collection, query) =>
+      }).pipe(
+        Effect.mapError(
+          (error) => new DbOperationError({ operation: "createDocument", cause: error }),
+        ),
+      ),
+  );
+
+  const listDocuments = Effect.fn("Database.listDocuments")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      query?: DbListQuery,
+    ): Effect.Effect<
+      { documents: ReadonlyArray<DbDocument>; nextCursor?: string },
+      DbOperationError
+    > =>
       Effect.gen(function* () {
         const dir = collectionPath(siteId, collection);
         const exists = yield* fs.exists(dir).pipe(Effect.orElseSucceed(() => false));
@@ -217,24 +269,47 @@ const make = Effect.gen(function* () {
             : undefined;
 
         return nextCursor ? { documents, nextCursor } : { documents };
-      }).pipe(Effect.mapError((error) => new Error(`listDocuments failed: ${String(error)}`))),
-    getDocument: (siteId, collection, id) =>
-      readDocument(siteId, collection, cleanSegment(id)).pipe(
-        Effect.mapError((error) => new Error(`getDocument failed: ${String(error)}`)),
+      }).pipe(
+        Effect.mapError(
+          (error) => new DbOperationError({ operation: "listDocuments", cause: error }),
+        ),
       ),
-    updateDocument: (siteId, collection, id, input) =>
+  );
+
+  const getDocument = Effect.fn("Database.getDocument")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      id: DocumentId,
+    ): Effect.Effect<DbDocument, DocumentNotFoundError | DbOperationError> =>
+      readDocument(siteId, collection, id),
+  );
+
+  const updateDocument = Effect.fn("Database.updateDocument")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      id: DocumentId,
+      input: DbUpdateInput,
+    ): Effect.Effect<
+      DbDocument,
+      DbOperationError | VersionConflictError | DocumentNotFoundError
+    > =>
       Effect.gen(function* () {
-        const cleanId = cleanSegment(id);
-        const existing = yield* readDocument(siteId, collection, cleanId);
+        const existing = yield* readDocument(siteId, collection, id);
         if (
           typeof input.expectedVersion === "number" &&
           existing.version !== input.expectedVersion
         ) {
-          return yield* Effect.fail(new Error("version conflict"));
+          return yield* new VersionConflictError({
+            id,
+            expectedVersion: input.expectedVersion,
+            actualVersion: existing.version,
+          });
         }
         const updated: DbDocument = {
           ...existing,
-          data: input.data as DbDocumentData,
+          data: input.data,
           version: existing.version + 1,
           updatedAt: nowIso(),
         };
@@ -248,21 +323,32 @@ const make = Effect.gen(function* () {
           at: nowIso(),
         });
         return updated;
-      }).pipe(Effect.mapError((error) => new Error(`updateDocument failed: ${String(error)}`))),
-    deleteDocument: (siteId, collection, id, input?: DbDeleteInput) =>
+      }),
+  );
+
+  const deleteDocument = Effect.fn("Database.deleteDocument")(
+    (
+      siteId: SiteId,
+      collection: CollectionId,
+      id: DocumentId,
+      input?: DbDeleteInput,
+    ): Effect.Effect<void, DbOperationError | VersionConflictError | DocumentNotFoundError> =>
       Effect.gen(function* () {
-        const cleanId = cleanSegment(id);
-        const existing = yield* readDocument(siteId, collection, cleanId);
+        const existing = yield* readDocument(siteId, collection, id);
         if (
           typeof input?.expectedVersion === "number" &&
           existing.version !== input.expectedVersion
         ) {
-          return yield* Effect.fail(new Error("version conflict"));
+          return yield* new VersionConflictError({
+            id,
+            expectedVersion: input.expectedVersion,
+            actualVersion: existing.version,
+          });
         }
-        const fullPath = documentPath(siteId, collection, cleanId);
+        const fullPath = documentPath(siteId, collection, id);
         const exists = yield* fs.exists(fullPath).pipe(Effect.orElseSucceed(() => false));
         if (!exists) {
-          return yield* Effect.fail(new Error("document not found"));
+          return yield* new DocumentNotFoundError({ siteId, collection, id });
         }
         yield* fs.remove(fullPath);
         yield* events.publish({
@@ -272,7 +358,25 @@ const make = Effect.gen(function* () {
           id: existing.id,
           at: nowIso(),
         });
-      }).pipe(Effect.mapError((error) => new Error(`deleteDocument failed: ${String(error)}`))),
+      }).pipe(
+        Effect.catchIf(
+          (error) =>
+            !(error instanceof DocumentNotFoundError) &&
+            !(error instanceof VersionConflictError),
+          (error) =>
+            Effect.fail(
+              new DbOperationError({ operation: "deleteDocument", cause: error }),
+            ),
+        ),
+      ),
+  );
+
+  return {
+    createDocument,
+    listDocuments,
+    getDocument,
+    updateDocument,
+    deleteDocument,
   } satisfies DatabaseApi;
 });
 

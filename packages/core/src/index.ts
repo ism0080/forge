@@ -1,12 +1,29 @@
 import { Schema } from "effect";
 
+export const SiteId = Schema.String.pipe(Schema.brand("SiteId"));
+export type SiteId = Schema.Schema.Type<typeof SiteId>;
+
+export const CollectionId = Schema.String.pipe(Schema.brand("CollectionId"));
+export type CollectionId = Schema.Schema.Type<typeof CollectionId>;
+
+export const DocumentId = Schema.String.pipe(Schema.brand("DocumentId"));
+export type DocumentId = Schema.Schema.Type<typeof DocumentId>;
+
+export const Port = Schema.NumberFromString.pipe(
+  Schema.check(Schema.isInt()),
+  Schema.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
+  Schema.brand("Port"),
+);
+export type Port = Schema.Schema.Type<typeof Port>;
+
 export const ForgeConfigSchema = Schema.Struct({
-  siteId: Schema.String,
+  siteId: SiteId,
   entry: Schema.String,
   apiBaseUrl: Schema.String,
   spa: Schema.optional(Schema.Boolean),
 });
 export type ForgeConfig = Schema.Schema.Type<typeof ForgeConfigSchema>;
+export const ForgeConfigFromJson = Schema.fromJsonString(ForgeConfigSchema);
 
 export const CapabilityDescriptorSchema = Schema.Struct({
   id: Schema.String,
@@ -47,7 +64,7 @@ export const UploadInputSchema = Schema.Struct({
 export type UploadInput = Schema.Schema.Type<typeof UploadInputSchema>;
 
 export const UploadRequestSchema = Schema.Struct({
-  siteId: Schema.String,
+  siteId: SiteId,
   path: Schema.String,
   contentBase64: Schema.String,
   contentType: Schema.optional(Schema.String),
@@ -64,26 +81,27 @@ export const DbDocumentDataSchema = Schema.Record(Schema.String, Schema.Unknown)
 export type DbDocumentData = Schema.Schema.Type<typeof DbDocumentDataSchema>;
 
 export const DbDocumentSchema = Schema.Struct({
-  id: Schema.String,
-  siteId: Schema.String,
-  collection: Schema.String,
+  id: DocumentId,
+  siteId: SiteId,
+  collection: CollectionId,
   data: DbDocumentDataSchema,
   version: Schema.Number,
   createdAt: Schema.String,
   updatedAt: Schema.String,
 });
 export type DbDocument = Schema.Schema.Type<typeof DbDocumentSchema>;
+export const DbDocumentFromJson = Schema.fromJsonString(DbDocumentSchema);
 
 export const DbCreateInputSchema = Schema.Struct({
   data: DbDocumentDataSchema,
-  id: Schema.optional(Schema.String),
+  id: Schema.optional(DocumentId),
 });
 export type DbCreateInput = Schema.Schema.Type<typeof DbCreateInputSchema>;
 
 export const DbCreateRequestSchema = Schema.Struct({
-  siteId: Schema.String,
+  siteId: SiteId,
   data: DbDocumentDataSchema,
-  id: Schema.optional(Schema.String),
+  id: Schema.optional(DocumentId),
 });
 export type DbCreateRequest = Schema.Schema.Type<typeof DbCreateRequestSchema>;
 
@@ -94,7 +112,7 @@ export const DbUpdateInputSchema = Schema.Struct({
 export type DbUpdateInput = Schema.Schema.Type<typeof DbUpdateInputSchema>;
 
 export const DbUpdateRequestSchema = Schema.Struct({
-  siteId: Schema.String,
+  siteId: SiteId,
   data: DbDocumentDataSchema,
   expectedVersion: Schema.optional(Schema.Number),
 });
@@ -132,13 +150,13 @@ export const DbSortDirSchema = Schema.Literals(["asc", "desc"]);
 export type DbSortDir = Schema.Schema.Type<typeof DbSortDirSchema>;
 
 export const DbDeleteRequestSchema = Schema.Struct({
-  siteId: Schema.String,
+  siteId: SiteId,
   expectedVersion: Schema.optional(Schema.Number),
 });
 export type DbDeleteRequest = Schema.Schema.Type<typeof DbDeleteRequestSchema>;
 
 export const DbListQuerySchema = Schema.Struct({
-  siteId: Schema.String,
+  siteId: SiteId,
   limit: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.String),
   whereField: Schema.optional(Schema.String),
@@ -153,9 +171,9 @@ export type DbChangeType = Schema.Schema.Type<typeof DbChangeTypeSchema>;
 
 export const DbChangeEventSchema = Schema.Struct({
   type: DbChangeTypeSchema,
-  siteId: Schema.String,
-  collection: Schema.String,
-  id: Schema.String,
+  siteId: SiteId,
+  collection: CollectionId,
+  id: DocumentId,
   document: Schema.optional(DbDocumentSchema),
   at: Schema.String,
 });
@@ -189,18 +207,59 @@ export const WebhookSendErrorResponseSchema = Schema.Struct({
 });
 export type WebhookSendErrorResponse = Schema.Schema.Type<typeof WebhookSendErrorResponseSchema>;
 
-export class ForgeError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ForgeError";
+export class DocumentNotFoundError extends Schema.TaggedErrorClass<DocumentNotFoundError>()(
+  "DocumentNotFoundError",
+  {
+    siteId: SiteId,
+    collection: CollectionId,
+    id: DocumentId,
+  },
+) {}
+
+export class VersionConflictError extends Schema.TaggedErrorClass<VersionConflictError>()(
+  "VersionConflictError",
+  {
+    id: DocumentId,
+    expectedVersion: Schema.Number,
+    actualVersion: Schema.Number,
+  },
+) {}
+
+export class StorageError extends Schema.TaggedErrorClass<StorageError>()(
+  "StorageError",
+  {
+    operation: Schema.String,
+    bucket: Schema.String,
+    key: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
+
+export class DbOperationError extends Schema.TaggedErrorClass<DbOperationError>()(
+  "DbOperationError",
+  {
+    operation: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
+
+export const DbError = Schema.Union([DocumentNotFoundError, VersionConflictError, DbOperationError]);
+export type DbError = Schema.Schema.Type<typeof DbError>;
+
+export class CliError extends Schema.TaggedErrorClass<CliError>()(
+  "CliError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  override toString(): string {
+    return this.message;
   }
 }
 
 export const DEFAULT_CONFIG: ForgeConfig = {
-  siteId: "my-site",
+  siteId: SiteId.make("my-site"),
   entry: ".",
   apiBaseUrl: "https://media-svr.stingray-goby.ts.net:1234",
   spa: true,

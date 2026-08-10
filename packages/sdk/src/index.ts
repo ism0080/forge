@@ -8,6 +8,11 @@ import type {
   UploadInput,
   WebhookSendInput,
 } from "@ism0080/forge-core";
+import {
+  CollectionId,
+  DocumentId,
+  SiteId,
+} from "@ism0080/forge-core";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
@@ -94,47 +99,49 @@ export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions)
     ),
   );
 
+  const site = SiteId.make(siteId);
+
   return {
     webhook: (input: WebhookSendInput) =>
       Effect.runPromise(client["server.webhook.gateway"]["webhook.forward"]({ payload: input })),
     db: {
       collection: (name: string) => {
-        const collection = ensureNoLeadingSlash(name);
+        const collection = CollectionId.make(ensureNoLeadingSlash(name));
         return {
           list: (query?: DbListQuery) =>
             Effect.runPromise(
               client["server.db"]["db.documents.list"]({
                 params: { collection },
-                query: { ...query, siteId },
+                query: { ...query, siteId: site },
               }),
             ),
           create: (input: DbCreateInput) =>
             Effect.runPromise(
               client["server.db"]["db.documents.create"]({
                 params: { collection },
-                payload: { siteId, data: input.data, id: input.id },
+                payload: { siteId: site, data: input.data, id: input.id },
               }),
             ),
           get: (id: string) =>
             Effect.runPromise(
               client["server.db"]["db.documents.get"]({
-                params: { collection, id },
-                query: { siteId },
+                params: { collection, id: DocumentId.make(id) },
+                query: { siteId: site },
               }),
             ),
           update: (id: string, input: DbUpdateInput) =>
             Effect.runPromise(
               client["server.db"]["db.documents.update"]({
-                params: { collection, id },
-                payload: { siteId, data: input.data, expectedVersion: input.expectedVersion },
+                params: { collection, id: DocumentId.make(id) },
+                payload: { siteId: site, data: input.data, expectedVersion: input.expectedVersion },
               }),
             ),
           delete: (id: string, input?: DbDeleteInput) =>
             Effect.runPromise(
               client["server.db"]["db.documents.delete"]({
-                params: { collection, id },
+                params: { collection, id: DocumentId.make(id) },
                 query: {
-                  siteId,
+                  siteId: site,
                   expectedVersion: input?.expectedVersion,
                 },
               }),
@@ -148,7 +155,7 @@ export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions)
       Effect.runPromise(
         client["server.upload"]["upload.create"]({
           payload: {
-            siteId,
+            siteId: site,
             path: input.path,
             contentBase64: input.contentBase64,
             ...(input.contentType ? { contentType: input.contentType } : {}),

@@ -1,4 +1,12 @@
-import type { DbDeleteInput, DbDocumentData, DbListQuery } from "@ism0080/forge-core";
+import type {
+  DbDeleteInput,
+  DbDocumentData,
+  DbListQuery,
+} from "@ism0080/forge-core";
+import {
+  DocumentNotFoundError,
+  VersionConflictError,
+} from "@ism0080/forge-core";
 import { Effect } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -6,15 +14,16 @@ import { Api } from "../api.js";
 import { DbEventsService } from "../services/db/events.js";
 import { DatabaseService } from "../services/db/service.js";
 
-const mapDbError = (error: unknown): Effect.Effect<never, { error: string }, never> => {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("document not found")) {
+const mapDbError = (
+  error: DocumentNotFoundError | VersionConflictError | { _tag: string },
+): Effect.Effect<never, { error: string }, never> => {
+  if (error instanceof DocumentNotFoundError) {
     return Effect.fail({ error: "document not found" as const });
   }
-  if (message.includes("version conflict")) {
+  if (error instanceof VersionConflictError) {
     return Effect.fail({ error: "version conflict" as const });
   }
-  return Effect.fail({ error: message });
+  return Effect.fail({ error: String(error) });
 };
 
 const buildListQuery = (query: {
@@ -41,15 +50,15 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         const socket = yield* Effect.orDie(request.upgrade);
         const write = yield* socket.writer;
 
-        const unsubscribe = yield* events.subscribe(
-          (event) => {
-            Effect.runFork(write(JSON.stringify(event)));
-          },
-          {
+        const unsubscribe = yield* Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
+          return yield* events.subscribe((event) => {
+            Effect.runForkWith(context)(write(JSON.stringify(event)));
+          }, {
             siteId: query.siteId,
             ...(query.collection !== undefined ? { collection: query.collection } : {}),
-          },
-        );
+          });
+        });
 
         yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 
@@ -69,7 +78,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
           database.listDocuments(query.siteId, params.collection, buildListQuery(query)),
           {
             onSuccess: (result) => Effect.succeed(result),
-            onFailure: mapDbError,
+            onFailure: (error) => mapDbError(error),
           },
         );
       }),
@@ -81,7 +90,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
           database.getDocument(query.siteId, params.collection, params.id),
           {
             onSuccess: (document) => Effect.succeed({ document }),
-            onFailure: mapDbError,
+            onFailure: (error) => mapDbError(error),
           },
         );
       }),
@@ -96,7 +105,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
           database.createDocument(payload.siteId, params.collection, input),
           {
             onSuccess: (document) => Effect.succeed({ document }),
-            onFailure: mapDbError,
+            onFailure: (error) => mapDbError(error),
           },
         );
       }),
@@ -114,7 +123,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
           database.updateDocument(payload.siteId, params.collection, params.id, input),
           {
             onSuccess: (document) => Effect.succeed({ document }),
-            onFailure: mapDbError,
+            onFailure: (error) => mapDbError(error),
           },
         );
       }),
@@ -130,7 +139,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
           database.deleteDocument(query.siteId, params.collection, params.id, input),
           {
             onSuccess: () => Effect.succeed({ ok: true as const }),
-            onFailure: mapDbError,
+            onFailure: (error) => mapDbError(error),
           },
         );
       }),

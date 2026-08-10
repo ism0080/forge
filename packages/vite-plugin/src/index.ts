@@ -1,6 +1,7 @@
-import type { ForgeConfig } from "@ism0080/forge-core";
+import { ForgeConfigFromJson, type ForgeConfig } from "@ism0080/forge-core";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Schema } from "effect";
 import type { Plugin } from "vite";
 
 export interface ForgeVitePluginOptions {
@@ -43,10 +44,10 @@ export const forgePlugin = (options: ForgeVitePluginOptions = {}): Plugin => {
 
       let config: ForgeConfig;
       try {
-        config = JSON.parse(raw) as ForgeConfig;
+        config = Schema.decodeUnknownSync(ForgeConfigFromJson)(raw);
       } catch (error) {
         this.error(
-          `Invalid JSON in forge config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+          `Invalid forge config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
         );
         return null;
       }

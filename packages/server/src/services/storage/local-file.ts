@@ -1,6 +1,7 @@
 import { Config, Context, Effect, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { StorageError } from "@ism0080/forge-core";
 import { type StorageApi, StorageService } from "./service.js";
 
 export interface LocalFileStorageConfig {
@@ -30,6 +31,16 @@ const cleanKey = (key: string): string =>
     .filter((segment) => segment.length > 0 && segment !== "." && segment !== "..")
     .join("/");
 
+const toStorageError =
+  (operation: string, bucket: string, key: string) =>
+  (error: unknown): StorageError =>
+    new StorageError({
+      operation,
+      bucket,
+      key,
+      cause: error,
+    });
+
 const make = Effect.gen(function* () {
   const config = yield* LocalFileStorageConfigService;
   const fs = yield* FileSystem.FileSystem;
@@ -42,8 +53,13 @@ const make = Effect.gen(function* () {
 
   yield* fs.makeDirectory(config.storageRoot, { recursive: true });
 
-  return {
-    putObject: (bucket, key, body, contentType) =>
+  const putObject = Effect.fn("Storage.putObject")(
+    (
+      bucket: string,
+      key: string,
+      body: Uint8Array,
+      contentType?: string,
+    ): Effect.Effect<void, StorageError> =>
       Effect.gen(function* () {
         const fullPath = objectPath(bucket, key);
         yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
@@ -53,12 +69,24 @@ const make = Effect.gen(function* () {
           const metadataPath = `${fullPath}.meta.json`;
           yield* fs.writeFileString(metadataPath, JSON.stringify({ contentType }));
         }
-      }).pipe(Effect.mapError((error) => new Error(`putObject failed: ${String(error)}`))),
-    getObject: (bucket, key) =>
+      }).pipe(Effect.mapError(toStorageError("putObject", bucket, key))),
+  );
+
+  const getObject = Effect.fn("Storage.getObject")(
+    (
+      bucket: string,
+      key: string,
+    ): Effect.Effect<Uint8Array, StorageError> =>
       fs
         .readFile(objectPath(bucket, key))
-        .pipe(Effect.mapError((error) => new Error(`getObject failed: ${String(error)}`))),
-    listKeys: (bucket, prefix) =>
+        .pipe(Effect.mapError(toStorageError("getObject", bucket, key))),
+  );
+
+  const listKeys = Effect.fn("Storage.listKeys")(
+    (
+      bucket: string,
+      prefix: string,
+    ): Effect.Effect<ReadonlyArray<string>, StorageError> =>
       Effect.gen(function* () {
         const basePath = bucketPath(bucket);
         const searchRoot = path.join(basePath, ...cleanKey(prefix).split("/"));
@@ -81,7 +109,13 @@ const make = Effect.gen(function* () {
         );
 
         return files.flatMap((file) => (Option.isSome(file) ? [file.value] : []));
-      }).pipe(Effect.mapError((error) => new Error(`listKeys failed: ${String(error)}`))),
+      }).pipe(Effect.mapError(toStorageError("listKeys", bucket, prefix))),
+  );
+
+  return {
+    putObject,
+    getObject,
+    listKeys,
   } satisfies StorageApi;
 });
 

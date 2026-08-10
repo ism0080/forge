@@ -9,7 +9,10 @@
     "dev:cli": "pnpm --filter @ism0080/forge-cli dev",
     "docker": "docker compose up -d",
     "docker:new": "docker compose up --force-recreate --build -d",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tests.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "effect-language-service patch",
     "cli:global": "pnpm --filter @ism0080/forge-cli build && pnpm add -g ./packages/cli",
     "cli:link": "pnpm --filter @ism0080/forge-cli build && pnpm --dir packages/cli link --global",
     "lint": "oxlint",
@@ -21,9 +24,12 @@
     "oxlint": "^1.69.0"
   },
   "devDependencies": {
+    "@effect/language-service": "^0.87.2",
+    "@effect/vitest": "4.0.0-beta.80",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.9.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
   },
   "packageManager": "pnpm@10.12.1"
 }
