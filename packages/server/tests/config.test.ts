@@ -11,9 +11,7 @@ describe("AppConfigService", () => {
       Effect.provide(
         AppConfigLayer.pipe(
           Layer.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({ SITE_BUCKET: "forge-sites" }),
-            ),
+            ConfigProvider.layer(ConfigProvider.fromUnknown({ SITE_BUCKET: "forge-sites" })),
           ),
         ),
       ),
@@ -28,9 +26,7 @@ describe("AppConfigService", () => {
       Effect.provide(
         AppConfigLayer.pipe(
           Layer.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({ SITE_BUCKET: "my-bucket" }),
-            ),
+            ConfigProvider.layer(ConfigProvider.fromUnknown({ SITE_BUCKET: "my-bucket" })),
           ),
         ),
       ),

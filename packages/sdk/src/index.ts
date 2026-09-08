@@ -8,11 +8,7 @@ import type {
   UploadInput,
   WebhookSendInput,
 } from "@ism0080/forge-core";
-import {
-  CollectionId,
-  DocumentId,
-  SiteId,
-} from "@ism0080/forge-core";
+import { CollectionId, DocumentId, SiteId } from "@ism0080/forge-core";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";

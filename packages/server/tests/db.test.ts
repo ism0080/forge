@@ -16,9 +16,7 @@ import { DbEventsInMemoryLayer } from "../src/services/db/events.js";
 const siteId = SiteId.make("site-a");
 const collection = CollectionId.make("posts");
 
-const withDatabase = <A, E>(
-  effect: Effect.Effect<A, E, DatabaseService>,
-) =>
+const withDatabase = <A, E>(effect: Effect.Effect<A, E, DatabaseService>) =>
   Effect.gen(function* () {
     const fs = yield* Effect.service(FileSystem.FileSystem);
     const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
@@ -26,9 +24,7 @@ const withDatabase = <A, E>(
     const layer = LocalFileDatabaseLayer.pipe(
       Layer.provide(DbEventsInMemoryLayer),
       Layer.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot }),
-        ),
+        ConfigProvider.layer(ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot })),
       ),
     );
 

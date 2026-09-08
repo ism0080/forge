@@ -54,7 +54,7 @@ Options:
 ```ts
 forgePlugin({
   configPath: "./forge.json", // default
-  base: "./",                  // default Vite base
+  base: "./", // default Vite base
 });
 ```
 

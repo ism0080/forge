@@ -8,10 +8,7 @@ export interface StorageApi {
     body: Uint8Array,
     contentType?: string,
   ) => Effect.Effect<void, StorageError>;
-  readonly getObject: (
-    bucket: string,
-    key: string,
-  ) => Effect.Effect<Uint8Array, StorageError>;
+  readonly getObject: (bucket: string, key: string) => Effect.Effect<Uint8Array, StorageError>;
   readonly listKeys: (
     bucket: string,
     prefix: string,

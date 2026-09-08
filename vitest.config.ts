@@ -7,9 +7,7 @@ export default defineConfig({
       "@ism0080/forge-core": fileURLToPath(
         new URL("./packages/core/src/index.ts", import.meta.url),
       ),
-      "@ism0080/forge-sdk": fileURLToPath(
-        new URL("./packages/sdk/src/index.ts", import.meta.url),
-      ),
+      "@ism0080/forge-sdk": fileURLToPath(new URL("./packages/sdk/src/index.ts", import.meta.url)),
       "@ism0080/forge-server/api": fileURLToPath(
         new URL("./packages/server/src/api.ts", import.meta.url),
       ),

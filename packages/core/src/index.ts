@@ -225,15 +225,12 @@ export class VersionConflictError extends Schema.TaggedErrorClass<VersionConflic
   },
 ) {}
 
-export class StorageError extends Schema.TaggedErrorClass<StorageError>()(
-  "StorageError",
-  {
-    operation: Schema.String,
-    bucket: Schema.String,
-    key: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {}
+export class StorageError extends Schema.TaggedErrorClass<StorageError>()("StorageError", {
+  operation: Schema.String,
+  bucket: Schema.String,
+  key: Schema.String,
+  cause: Schema.Defect(),
+}) {}
 
 export class DbOperationError extends Schema.TaggedErrorClass<DbOperationError>()(
   "DbOperationError",
@@ -243,16 +240,17 @@ export class DbOperationError extends Schema.TaggedErrorClass<DbOperationError>(
   },
 ) {}
 
-export const DbError = Schema.Union([DocumentNotFoundError, VersionConflictError, DbOperationError]);
+export const DbError = Schema.Union([
+  DocumentNotFoundError,
+  VersionConflictError,
+  DbOperationError,
+]);
 export type DbError = Schema.Schema.Type<typeof DbError>;
 
-export class CliError extends Schema.TaggedErrorClass<CliError>()(
-  "CliError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {
+export class CliError extends Schema.TaggedErrorClass<CliError>()("CliError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {
   override toString(): string {
     return this.message;
   }

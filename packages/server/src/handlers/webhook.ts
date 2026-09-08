@@ -23,7 +23,9 @@ export const WebhookGatewayHandler = HttpApiBuilder.group(
           };
 
           const apiUrl = Option.getOrNull(externalApiUrl);
-          const apiKey = Redacted.value(Option.getOrElse(() => Redacted.make(null))(externalApiKey));
+          const apiKey = Redacted.value(
+            Option.getOrElse(() => Redacted.make(null))(externalApiKey),
+          );
 
           if (!apiKey || !apiUrl) {
             return Effect.fail({

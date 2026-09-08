@@ -73,20 +73,14 @@ const make = Effect.gen(function* () {
   );
 
   const getObject = Effect.fn("Storage.getObject")(
-    (
-      bucket: string,
-      key: string,
-    ): Effect.Effect<Uint8Array, StorageError> =>
+    (bucket: string, key: string): Effect.Effect<Uint8Array, StorageError> =>
       fs
         .readFile(objectPath(bucket, key))
         .pipe(Effect.mapError(toStorageError("getObject", bucket, key))),
   );
 
   const listKeys = Effect.fn("Storage.listKeys")(
-    (
-      bucket: string,
-      prefix: string,
-    ): Effect.Effect<ReadonlyArray<string>, StorageError> =>
+    (bucket: string, prefix: string): Effect.Effect<ReadonlyArray<string>, StorageError> =>
       Effect.gen(function* () {
         const basePath = bucketPath(bucket);
         const searchRoot = path.join(basePath, ...cleanKey(prefix).split("/"));

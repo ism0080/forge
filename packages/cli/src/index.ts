@@ -140,9 +140,9 @@ const init = Command.make(
       .writeFileString(configPath, `${JSON.stringify(config, null, 2)}\n`)
       .pipe(Effect.mapError(cliError("Unable to write forge.json")));
 
-    const hasIndex = yield* fs.exists(path.join(cwd, "index.html")).pipe(
-      Effect.orElseSucceed(() => false),
-    );
+    const hasIndex = yield* fs
+      .exists(path.join(cwd, "index.html"))
+      .pipe(Effect.orElseSucceed(() => false));
 
     if (!hasIndex) {
       yield* scaffoldTemplate(resolvedSiteId, template);

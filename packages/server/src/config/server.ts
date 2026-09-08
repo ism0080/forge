@@ -19,7 +19,9 @@ export class AppConfigService extends Context.Service<
   static readonly layer = Layer.effect(
     AppConfigService,
     Effect.gen(function* () {
-      const siteBucket = yield* Config.string("SITE_BUCKET").pipe(Config.withDefault("forge-sites"));
+      const siteBucket = yield* Config.string("SITE_BUCKET").pipe(
+        Config.withDefault("forge-sites"),
+      );
 
       return {
         siteBucket,

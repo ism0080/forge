@@ -291,10 +291,7 @@ const make = Effect.gen(function* () {
       collection: CollectionId,
       id: DocumentId,
       input: DbUpdateInput,
-    ): Effect.Effect<
-      DbDocument,
-      DbOperationError | VersionConflictError | DocumentNotFoundError
-    > =>
+    ): Effect.Effect<DbDocument, DbOperationError | VersionConflictError | DocumentNotFoundError> =>
       Effect.gen(function* () {
         const existing = yield* readDocument(siteId, collection, id);
         if (
@@ -361,12 +358,9 @@ const make = Effect.gen(function* () {
       }).pipe(
         Effect.catchIf(
           (error) =>
-            !(error instanceof DocumentNotFoundError) &&
-            !(error instanceof VersionConflictError),
+            !(error instanceof DocumentNotFoundError) && !(error instanceof VersionConflictError),
           (error) =>
-            Effect.fail(
-              new DbOperationError({ operation: "deleteDocument", cause: error }),
-            ),
+            Effect.fail(new DbOperationError({ operation: "deleteDocument", cause: error })),
         ),
       ),
   );

@@ -1,12 +1,5 @@
-import type {
-  DbDeleteInput,
-  DbDocumentData,
-  DbListQuery,
-} from "@ism0080/forge-core";
-import {
-  DocumentNotFoundError,
-  VersionConflictError,
-} from "@ism0080/forge-core";
+import type { DbDeleteInput, DbDocumentData, DbListQuery } from "@ism0080/forge-core";
+import { DocumentNotFoundError, VersionConflictError } from "@ism0080/forge-core";
 import { Effect } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -52,12 +45,15 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
 
         const unsubscribe = yield* Effect.gen(function* () {
           const context = yield* Effect.context<never>();
-          return yield* events.subscribe((event) => {
-            Effect.runForkWith(context)(write(JSON.stringify(event)));
-          }, {
-            siteId: query.siteId,
-            ...(query.collection !== undefined ? { collection: query.collection } : {}),
-          });
+          return yield* events.subscribe(
+            (event) => {
+              Effect.runForkWith(context)(write(JSON.stringify(event)));
+            },
+            {
+              siteId: query.siteId,
+              ...(query.collection !== undefined ? { collection: query.collection } : {}),
+            },
+          );
         });
 
         yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));

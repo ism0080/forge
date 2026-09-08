@@ -22,12 +22,12 @@
     "@ism0080/forge-core": "workspace:*",
     "effect": "4.0.0-beta.80"
   },
-  "peerDependencies": {
-    "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
-  },
   "devDependencies": {
     "@types/node": "^25.9.3",
     "typescript": "^5.8.3",
     "vite": "^8.0.0"
+  },
+  "peerDependencies": {
+    "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
   }
 }

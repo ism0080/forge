@@ -1,9 +1,5 @@
 import { Schema } from "effect";
-import {
-  HttpApiEndpoint,
-  HttpApiGroup,
-  HttpApiSchema,
-} from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 const SiteInternalError = Schema.Struct({
   error: Schema.String,
@@ -15,9 +11,7 @@ const SiteNotFoundError = Schema.Struct({
 
 export const SitesGroup = HttpApiGroup.make("server.sites").add(
   HttpApiEndpoint.get("sites.list", "/directory", {
-    success: Schema.String.pipe(
-      HttpApiSchema.asText({ contentType: "text/html" }),
-    ),
+    success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/html" })),
     error: SiteInternalError,
   }),
   HttpApiEndpoint.get("sites.get", "/sites/*", {
