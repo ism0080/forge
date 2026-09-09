@@ -32,6 +32,17 @@ describe("ForgeConfigSchema", () => {
     expect(config.siteId).toBeTypeOf("string");
   });
 
+  it("decodes an optional Drizzle migration directory", () => {
+    const config = Schema.decodeUnknownSync(ForgeConfigSchema)({
+      siteId: "demo",
+      entry: "dist",
+      apiBaseUrl: "https://example.com",
+      database: { migrations: "drizzle" },
+    });
+
+    expect(config.database?.migrations).toBe("drizzle");
+  });
+
   it("rejects config missing apiBaseUrl", () => {
     expect(() =>
       Schema.decodeUnknownSync(ForgeConfigSchema)({

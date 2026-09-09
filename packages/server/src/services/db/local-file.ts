@@ -21,6 +21,16 @@ import type {
 } from "@ism0080/forge-core";
 import { type DatabaseApi, DatabaseService } from "./service.js";
 import { DbEventsService } from "./events.js";
+import {
+  cleanSegment,
+  DbClockLayer,
+  DbClockService,
+  parseLimit,
+  parseSortBy,
+  parseSortDir,
+  randomId,
+  siteStorageKey,
+} from "./shared.js";
 
 export interface LocalFileDatabaseConfig {
   readonly storageRoot: string;
@@ -39,25 +49,6 @@ const LocalFileDatabaseConfigLayer = Layer.effect(
   }),
 );
 
-const cleanSegment = (value: string): string =>
-  value.replaceAll("\\", "-").replaceAll("/", "-").trim().replaceAll("..", "-");
-
-const nowIso = (): string => new Date().toISOString();
-
-const randomId = (): string =>
-  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-
-const parseLimit = (query?: DbListQuery): number => {
-  const raw = query?.limit;
-  if (typeof raw !== "number" || !Number.isFinite(raw)) {
-    return 50;
-  }
-  const floored = Math.floor(raw);
-  if (floored < 1) return 1;
-  if (floored > 200) return 200;
-  return floored;
-};
-
 const cursorForDocument = (document: DbDocument): string => `${document.createdAt}|${document.id}`;
 
 const decodeCursor = (cursor: string): { createdAt: string; id: string } | undefined => {
@@ -66,18 +57,6 @@ const decodeCursor = (cursor: string): { createdAt: string; id: string } | undef
     return undefined;
   }
   return { createdAt, id };
-};
-
-const parseSortBy = (query?: DbListQuery): DbSortBy => {
-  const raw = query?.sortBy;
-  if (raw === "updatedAt" || raw === "id") {
-    return raw;
-  }
-  return "createdAt";
-};
-
-const parseSortDir = (query?: DbListQuery): DbSortDir => {
-  return query?.sortDir === "asc" ? "asc" : "desc";
 };
 
 const compareDocs = (
@@ -125,11 +104,12 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const events = yield* DbEventsService;
+  const clock = yield* DbClockService;
 
   yield* fs.makeDirectory(config.storageRoot, { recursive: true });
 
   const collectionPath = (siteId: string, collection: string): string =>
-    path.join(config.storageRoot, cleanSegment(siteId), cleanSegment(collection));
+    path.join(config.storageRoot, siteStorageKey(siteId), cleanSegment(collection));
 
   const documentPath = (siteId: string, collection: string, id: string): string =>
     path.join(collectionPath(siteId, collection), `${cleanSegment(id)}.json`);
@@ -186,8 +166,8 @@ const make = Effect.gen(function* () {
       input: DbCreateInput,
     ): Effect.Effect<DbDocument, DbOperationError> =>
       Effect.gen(function* () {
-        const id = input.id ?? DocumentId.make(randomId());
-        const createdAt = nowIso();
+        const id = input.id ?? DocumentId.make(yield* randomId);
+        const createdAt = yield* clock.currentTimeIso;
         const document: DbDocument = {
           id,
           siteId,
@@ -201,13 +181,14 @@ const make = Effect.gen(function* () {
         const fullPath = documentPath(siteId, collection, id);
         yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
         yield* fs.writeFileString(fullPath, `${JSON.stringify(document)}\n`);
+        const at = yield* clock.currentTimeIso;
         yield* events.publish({
           type: "created",
           siteId,
           collection,
           id,
           document,
-          at: nowIso(),
+          at,
         });
 
         return document;
@@ -304,11 +285,12 @@ const make = Effect.gen(function* () {
             actualVersion: existing.version,
           });
         }
+        const updatedAt = yield* clock.currentTimeIso;
         const updated: DbDocument = {
           ...existing,
           data: input.data,
           version: existing.version + 1,
-          updatedAt: nowIso(),
+          updatedAt,
         };
         yield* writeDocument(siteId, collection, updated);
         yield* events.publish({
@@ -317,7 +299,7 @@ const make = Effect.gen(function* () {
           collection,
           id: updated.id,
           document: updated,
-          at: nowIso(),
+          at: updatedAt,
         });
         return updated;
       }),
@@ -348,12 +330,13 @@ const make = Effect.gen(function* () {
           return yield* new DocumentNotFoundError({ siteId, collection, id });
         }
         yield* fs.remove(fullPath);
+        const at = yield* clock.currentTimeIso;
         yield* events.publish({
           type: "deleted",
           siteId,
           collection,
           id: existing.id,
-          at: nowIso(),
+          at,
         });
       }).pipe(
         Effect.catchIf(
@@ -376,4 +359,5 @@ const make = Effect.gen(function* () {
 
 export const LocalFileDatabaseLayer = Layer.effect(DatabaseService, make).pipe(
   Layer.provide(LocalFileDatabaseConfigLayer),
+  Layer.provide(DbClockLayer),
 );

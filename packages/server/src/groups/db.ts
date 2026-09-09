@@ -28,14 +28,14 @@ const DbBadRequestError = Schema.Struct({
 }).pipe(HttpApiSchema.status("BadRequest"));
 
 const DbInternalError = Schema.Struct({
-  error: Schema.String,
+  error: Schema.Literal("internal error"),
 }).pipe(HttpApiSchema.status("InternalServerError"));
 
 const DbError = Schema.Union([
   DbNotFoundError,
   DbConflictError,
-  DbBadRequestError,
   DbInternalError,
+  DbBadRequestError,
 ]);
 
 export const DbGroup = HttpApiGroup.make("server.db").add(
@@ -44,6 +44,7 @@ export const DbGroup = HttpApiGroup.make("server.db").add(
     query: Schema.Struct({
       siteId: Schema.String,
       collection: Schema.optional(Schema.String),
+      table: Schema.optional(Schema.String),
     }),
   }),
   HttpApiEndpoint.get("db.documents.list", "/api/db/:collection", {

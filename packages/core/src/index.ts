@@ -21,6 +21,11 @@ export const ForgeConfigSchema = Schema.Struct({
   entry: Schema.String,
   apiBaseUrl: Schema.String,
   spa: Schema.optional(Schema.Boolean),
+  database: Schema.optional(
+    Schema.Struct({
+      migrations: Schema.String,
+    }),
+  ),
 });
 export type ForgeConfig = Schema.Schema.Type<typeof ForgeConfigSchema>;
 export const ForgeConfigFromJson = Schema.fromJsonString(ForgeConfigSchema);
@@ -178,6 +183,16 @@ export const DbChangeEventSchema = Schema.Struct({
   at: Schema.String,
 });
 export type DbChangeEvent = Schema.Schema.Type<typeof DbChangeEventSchema>;
+
+export const SchemaRowChangeEventSchema = Schema.Struct({
+  type: DbChangeTypeSchema,
+  siteId: SiteId,
+  table: Schema.String,
+  id: DocumentId,
+  row: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  at: Schema.String,
+});
+export type SchemaRowChangeEvent = Schema.Schema.Type<typeof SchemaRowChangeEventSchema>;
 
 export const DbListResponseSchema = Schema.Struct({
   documents: Schema.Array(DbDocumentSchema),

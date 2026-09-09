@@ -88,6 +88,8 @@ Current endpoints:
 - `PUT /api/db/:collection/:id` with `{ "siteId": "...", "data": { ... }, "expectedVersion": 1 }` (optional optimistic concurrency)
 - `DELETE /api/db/:collection/:id?siteId=<siteId>&expectedVersion=<n>` (optional optimistic concurrency)
 - `GET /api/db/events?siteId=<siteId>&collection=<collection>` websocket stream of DB events
+- `POST /api/db/migrations` applies an ordered bundle of Drizzle-generated SQL migrations
+- `GET|POST|PUT|DELETE /api/tables/:table[/:id]` provides generic row CRUD for Drizzle tables
 
 Notes:
 
@@ -95,13 +97,14 @@ Notes:
 - If `expectedVersion` does not match, the API returns `409 version conflict`.
 - The DB adapter emits create/update/delete change events through a pluggable events service (`packages/server/src/db/events.ts`).
 - Current default wiring uses an in-memory pub/sub bus (`DbEventsInMemoryLayer`) plus a console tap (`DbEventsConsoleTapLayer`), ready for websocket fanout wiring.
+- Migration history stores server-computed SHA-256 hashes, timestamps, durations, and deployment IDs. Limits are configured with `DB_MIGRATION_MAX_COUNT`, `DB_MIGRATION_MAX_BYTES`, `DB_MIGRATION_MAX_BUNDLE_BYTES`, and `DB_MIGRATION_TIMEOUT_MS`.
 
 ## SDK usage
 
 ```ts
 import { createClient } from "@ism0080/forge-sdk";
 
-const client = createClient({
+const client = await createClient({
   baseUrl: "http://localhost:8787",
   siteId: "demo",
 });
@@ -210,7 +213,7 @@ export default {
 ```ts
 import { apiBaseUrl, baseUrl, siteId, spa, entry } from "virtual:forge";
 
-const client = createClient({ baseUrl: apiBaseUrl, siteId });
+const client = await createClient({ baseUrl: apiBaseUrl, siteId });
 ```
 
 Options:

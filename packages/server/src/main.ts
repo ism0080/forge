@@ -7,7 +7,9 @@ import { routes } from "./routes.js";
 import { AppConfigLayer, serverConfig } from "./config/server.js";
 import { WebhookConfigLayer } from "./config/webhook.js";
 import { DbEventsConsoleTapLayer, DbEventsInMemoryLayer } from "./services/db/events.js";
-import { LocalFileDatabaseLayer } from "./services/db/local-file.js";
+import { DatabaseEngineLayer } from "./services/db/engine.js";
+import { SiteConnectionsLayer } from "./services/db/sqlite-connection.js";
+import { SchemaServiceLayer } from "./services/db/schema-service.js";
 import { LocalFileStorageLayer } from "./services/storage/local-file.js";
 import { CorsMiddleware } from "./middleware/cors.js";
 
@@ -19,7 +21,9 @@ const main = HttpRouter.serve(routes).pipe(
   Layer.provide(AppConfigLayer),
   Layer.provide(HttpRouter.layer),
   Layer.provide(LocalFileStorageLayer),
-  Layer.provide(LocalFileDatabaseLayer),
+  Layer.provide(DatabaseEngineLayer),
+  Layer.provide(SchemaServiceLayer),
+  Layer.provide(SiteConnectionsLayer),
   Layer.provide(DbEventsConsoleTapLayer),
   Layer.provide(DbEventsInMemoryLayer),
   Layer.provide(WebhookConfigLayer),

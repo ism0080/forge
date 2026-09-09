@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -118,6 +119,51 @@ const collectFiles = (
     return out;
   });
 
+const readMigrations = (directory: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const files = (yield* collectFiles(directory))
+      .filter((file) => path.basename(file) === "migration.sql" || file.endsWith(".sql"))
+      .sort((a, b) => a.localeCompare(b));
+
+    return yield* Effect.forEach(files, (file) =>
+      Effect.gen(function* () {
+        const sql = yield* fs
+          .readFileString(file)
+          .pipe(Effect.mapError(cliError(`Unable to read migration ${file}`)));
+        const relative = path.relative(directory, file).replaceAll("\\", "/");
+        const id = relative.endsWith("/migration.sql")
+          ? relative.slice(0, -"/migration.sql".length)
+          : relative;
+        return {
+          id,
+          sql,
+        };
+      }),
+    );
+  });
+
+const applyConfiguredMigrations = (
+  config: ForgeConfig,
+  client: Awaited<ReturnType<typeof createClient>>,
+) =>
+  Effect.gen(function* () {
+    if (config.database === undefined) {
+      return;
+    }
+    const path = yield* Path.Path;
+    const directory = path.join(cwd, config.database.migrations);
+    const migrations = yield* readMigrations(directory);
+    const result = yield* Effect.tryPromise({
+      try: () => client.db.applyMigrations(randomUUID(), migrations),
+      catch: cliError("Database migration failed"),
+    });
+    for (const id of result.applied) {
+      yield* Effect.log(`applied migration ${id}`);
+    }
+  });
+
 const init = Command.make(
   "init",
   {
@@ -174,6 +220,7 @@ const deploy = Command.make(
           }
         : yield* readConfig();
     const client = yield* makeClient(config);
+    yield* applyConfiguredMigrations(config, client);
     const root = path.join(cwd, config.entry);
     const files = yield* collectFiles(root);
 
@@ -238,9 +285,42 @@ const dev = Command.make(
   }),
 ).pipe(Command.withDescription("Run local development stack"));
 
+const dbPush = Command.make(
+  "push",
+  {
+    directory: Argument.string("directory").pipe(Argument.optional),
+  },
+  Effect.fn(function* ({ directory }) {
+    const path = yield* Path.Path;
+    const config = yield* readConfig();
+    const configuredDirectory = Option.getOrUndefined(directory) ?? config.database?.migrations;
+    if (configuredDirectory === undefined) {
+      return yield* new CliError({
+        message: "Migration directory required; pass it or set database.migrations in forge.json",
+      });
+    }
+    const migrations = yield* readMigrations(path.join(cwd, configuredDirectory));
+    const client = yield* makeClient(config);
+    const result = yield* Effect.tryPromise({
+      try: () => client.db.applyMigrations(randomUUID(), migrations),
+      catch: cliError("Database migration failed"),
+    });
+    yield* Effect.log(
+      result.applied.length === 0
+        ? `Database is up to date for site '${config.siteId}'`
+        : `Applied ${result.applied.length} migration(s) for site '${config.siteId}'`,
+    );
+  }),
+).pipe(Command.withDescription("Apply Drizzle SQL migrations to the site database"));
+
+const db = Command.make("db").pipe(
+  Command.withDescription("Database commands"),
+  Command.withSubcommands([dbPush]),
+);
+
 const cli = Command.make("forge").pipe(
   Command.withDescription("Forge CLI"),
-  Command.withSubcommands([init, deploy, plugins, dev]),
+  Command.withSubcommands([init, deploy, db, plugins, dev]),
 );
 
 Command.run(cli, { version: CLI_VERSION }).pipe(

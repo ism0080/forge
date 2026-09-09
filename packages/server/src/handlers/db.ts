@@ -1,23 +1,29 @@
 import type { DbDeleteInput, DbDocumentData, DbListQuery } from "@ism0080/forge-core";
 import { DocumentNotFoundError, VersionConflictError } from "@ism0080/forge-core";
-import { Effect } from "effect";
+import { Effect, Queue, Stream } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "../api.js";
 import { DbEventsService } from "../services/db/events.js";
 import { DatabaseService } from "../services/db/service.js";
 
-const mapDbError = (
-  error: DocumentNotFoundError | VersionConflictError | { _tag: string },
-): Effect.Effect<never, { error: string }, never> => {
+const DB_EVENT_SOCKET_BACKLOG = 256;
+
+const isExpected = (error: unknown): boolean =>
+  error instanceof DocumentNotFoundError || error instanceof VersionConflictError;
+
+const mapDbError = (error: unknown): { error: string } => {
   if (error instanceof DocumentNotFoundError) {
-    return Effect.fail({ error: "document not found" as const });
+    return { error: "document not found" };
   }
   if (error instanceof VersionConflictError) {
-    return Effect.fail({ error: "version conflict" as const });
+    return { error: "version conflict" };
   }
-  return Effect.fail({ error: String(error) });
+  return { error: "internal error" };
 };
+
+const tapUnexpected = (error: unknown): Effect.Effect<void> =>
+  isExpected(error) ? Effect.void : Effect.logError("Unexpected database error", error);
 
 const buildListQuery = (query: {
   readonly limit?: number | undefined;
@@ -43,20 +49,32 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         const socket = yield* Effect.orDie(request.upgrade);
         const write = yield* socket.writer;
 
-        const unsubscribe = yield* Effect.gen(function* () {
-          const context = yield* Effect.context<never>();
-          return yield* events.subscribe(
-            (event) => {
-              Effect.runForkWith(context)(write(JSON.stringify(event)));
-            },
-            {
-              siteId: query.siteId,
-              ...(query.collection !== undefined ? { collection: query.collection } : {}),
-            },
-          );
-        });
-
+        const queue = yield* Queue.sliding<Uint8Array>(DB_EVENT_SOCKET_BACKLOG);
+        const unsubscribe = yield* events.subscribe(
+          (event) => {
+            Queue.offerUnsafe(queue, new TextEncoder().encode(JSON.stringify(event)));
+          },
+          {
+            siteId: query.siteId,
+            ...(query.collection !== undefined ? { collection: query.collection } : {}),
+            ...(query.table !== undefined ? { table: query.table } : {}),
+          },
+        );
         yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+        yield* Effect.forkChild(
+          Stream.fromQueue(queue).pipe(
+            Stream.flatMap((chunk) =>
+              Stream.fromEffect(
+                write(chunk).pipe(
+                  Effect.tapError((cause) => Effect.logError("socket write failed", cause)),
+                  Effect.orDie,
+                ),
+              ),
+            ),
+            Stream.runDrain,
+          ),
+        ).pipe(Effect.orDie);
 
         yield* Effect.orDie(
           socket.runRaw(() => {
@@ -70,24 +88,18 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
     .handle("db.documents.list", ({ params, query }) =>
       Effect.gen(function* () {
         const database = yield* DatabaseService;
-        return yield* Effect.matchEffect(
-          database.listDocuments(query.siteId, params.collection, buildListQuery(query)),
-          {
-            onSuccess: (result) => Effect.succeed(result),
-            onFailure: (error) => mapDbError(error),
-          },
-        );
+        return yield* database
+          .listDocuments(query.siteId, params.collection, buildListQuery(query))
+          .pipe(Effect.tapError(tapUnexpected), Effect.mapError(mapDbError));
       }),
     )
     .handle("db.documents.get", ({ params, query }) =>
       Effect.gen(function* () {
         const database = yield* DatabaseService;
-        return yield* Effect.matchEffect(
-          database.getDocument(query.siteId, params.collection, params.id),
-          {
-            onSuccess: (document) => Effect.succeed({ document }),
-            onFailure: (error) => mapDbError(error),
-          },
+        return yield* database.getDocument(query.siteId, params.collection, params.id).pipe(
+          Effect.tapError(tapUnexpected),
+          Effect.mapError(mapDbError),
+          Effect.map((document) => ({ document })),
         );
       }),
     )
@@ -97,12 +109,10 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         const input = payload.id
           ? { data: payload.data as DbDocumentData, id: payload.id }
           : { data: payload.data as DbDocumentData };
-        return yield* Effect.matchEffect(
-          database.createDocument(payload.siteId, params.collection, input),
-          {
-            onSuccess: (document) => Effect.succeed({ document }),
-            onFailure: (error) => mapDbError(error),
-          },
+        return yield* database.createDocument(payload.siteId, params.collection, input).pipe(
+          Effect.tapError(tapUnexpected),
+          Effect.mapError(mapDbError),
+          Effect.map((document) => ({ document })),
         );
       }),
     )
@@ -115,13 +125,13 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
             ? { expectedVersion: payload.expectedVersion }
             : {}),
         };
-        return yield* Effect.matchEffect(
-          database.updateDocument(payload.siteId, params.collection, params.id, input),
-          {
-            onSuccess: (document) => Effect.succeed({ document }),
-            onFailure: (error) => mapDbError(error),
-          },
-        );
+        return yield* database
+          .updateDocument(payload.siteId, params.collection, params.id, input)
+          .pipe(
+            Effect.tapError(tapUnexpected),
+            Effect.mapError(mapDbError),
+            Effect.map((document) => ({ document })),
+          );
       }),
     )
     .handle("db.documents.delete", ({ params, query }) =>
@@ -131,13 +141,13 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
           typeof query.expectedVersion === "number" && Number.isFinite(query.expectedVersion)
             ? { expectedVersion: query.expectedVersion }
             : {};
-        return yield* Effect.matchEffect(
-          database.deleteDocument(query.siteId, params.collection, params.id, input),
-          {
-            onSuccess: () => Effect.succeed({ ok: true as const }),
-            onFailure: (error) => mapDbError(error),
-          },
-        );
+        return yield* database
+          .deleteDocument(query.siteId, params.collection, params.id, input)
+          .pipe(
+            Effect.tapError(tapUnexpected),
+            Effect.mapError(mapDbError),
+            Effect.map(() => ({ ok: true as const })),
+          );
       }),
     ),
 );

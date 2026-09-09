@@ -5,6 +5,7 @@ import type {
   DbDocument,
   DbListQuery,
   DbUpdateInput,
+  SchemaRowChangeEvent,
   UploadInput,
   WebhookSendInput,
 } from "@ism0080/forge-core";
@@ -13,6 +14,8 @@ import { Effect } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { Api } from "@ism0080/forge-server/api";
+import { getTableColumns, getTableName } from "drizzle-orm";
+import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 
 export interface ForgeClientOptions {
   readonly baseUrl: string;
@@ -23,11 +26,58 @@ const ensureNoLeadingSlash = (value: string): string => value.replace(/^\/+/, ""
 
 const normalizeBaseUrl = (baseUrl: string): string => baseUrl.replace(/\/+$/, "");
 
-const buildEventsUrl = (baseUrl: string, siteId: string, collection: string): string => {
+interface SocketHandlers {
+  readonly onOpen?: () => void;
+  readonly onError?: (event: Event) => void;
+  readonly onClose?: (event: CloseEvent) => void;
+}
+
+const buildEventsUrl = (
+  baseUrl: string,
+  siteId: string,
+  scope: { readonly collection?: string; readonly table?: string },
+): string => {
   const url = new URL(`${baseUrl}/api/db/events`);
   url.searchParams.set("siteId", siteId);
-  url.searchParams.set("collection", collection);
+  if (scope.collection !== undefined) {
+    url.searchParams.set("collection", scope.collection);
+  }
+  if (scope.table !== undefined) {
+    url.searchParams.set("table", scope.table);
+  }
   return url.toString();
+};
+
+const openEventSocket = (
+  wsUrl: string,
+  handlers: SocketHandlers,
+  dispatch: (event: unknown) => void,
+): (() => void) => {
+  const socket = new WebSocket(wsUrl);
+
+  socket.onopen = () => {
+    handlers.onOpen?.();
+  };
+
+  socket.onerror = (event) => {
+    handlers.onError?.(event);
+  };
+
+  socket.onclose = (event) => {
+    handlers.onClose?.(event);
+  };
+
+  socket.onmessage = (message) => {
+    try {
+      dispatch(JSON.parse(String(message.data)));
+    } catch {
+      // ignore malformed payloads
+    }
+  };
+
+  return () => {
+    socket.close();
+  };
 };
 
 const createDbSubscription = (
@@ -44,50 +94,127 @@ const createDbSubscription = (
     readonly onClose?: (event: CloseEvent) => void;
   },
 ): (() => void) => {
-  const wsUrl = buildEventsUrl(baseUrl, siteId, collection).replace(/^http/i, "ws");
-  const socket = new WebSocket(wsUrl);
+  const wsUrl = buildEventsUrl(baseUrl, siteId, { collection }).replace(/^http/i, "ws");
+  return openEventSocket(wsUrl, handlers, (raw) => {
+    const event = raw as DbChangeEvent;
+    handlers.onEvent?.(event);
 
-  socket.onopen = () => {
-    handlers.onOpen?.();
-  };
-
-  socket.onerror = (event) => {
-    handlers.onError?.(event);
-  };
-
-  socket.onclose = (event) => {
-    handlers.onClose?.(event);
-  };
-
-  socket.onmessage = (event) => {
-    try {
-      const parsed = JSON.parse(String(event.data)) as DbChangeEvent;
-      handlers.onEvent?.(parsed);
-
-      if (parsed.type === "created" && parsed.document) {
-        handlers.onCreate?.(parsed.document);
-        return;
-      }
-
-      if (parsed.type === "updated" && parsed.document) {
-        handlers.onUpdate?.(parsed.document);
-        return;
-      }
-
-      if (parsed.type === "deleted") {
-        handlers.onDelete?.(parsed.id);
-      }
-    } catch {
-      // ignore malformed payloads
+    if (event.type === "created" && event.document) {
+      handlers.onCreate?.(event.document);
+      return;
     }
-  };
 
-  return () => {
-    socket.close();
+    if (event.type === "updated" && event.document) {
+      handlers.onUpdate?.(event.document);
+      return;
+    }
+
+    if (event.type === "deleted") {
+      handlers.onDelete?.(event.id);
+    }
+  });
+};
+
+const createRowSubscription = (
+  baseUrl: string,
+  siteId: string,
+  table: string,
+  handlers: {
+    readonly onCreate?: (row: Record<string, unknown>) => void;
+    readonly onUpdate?: (row: Record<string, unknown>) => void;
+    readonly onDelete?: (id: string) => void;
+    readonly onEvent?: (event: SchemaRowChangeEvent) => void;
+    readonly onOpen?: () => void;
+    readonly onError?: (event: Event) => void;
+    readonly onClose?: (event: CloseEvent) => void;
+  },
+): (() => void) => {
+  const wsUrl = buildEventsUrl(baseUrl, siteId, { table }).replace(/^http/i, "ws");
+  return openEventSocket(wsUrl, handlers, (raw) => {
+    const event = raw as SchemaRowChangeEvent;
+    handlers.onEvent?.(event);
+
+    if (event.type === "created" && event.row) {
+      handlers.onCreate?.(event.row);
+      return;
+    }
+
+    if (event.type === "updated" && event.row) {
+      handlers.onUpdate?.(event.row);
+      return;
+    }
+
+    if (event.type === "deleted") {
+      handlers.onDelete?.(event.id);
+    }
+  });
+};
+
+type DbManagedRowKeys = "id" | "version" | "createdAt" | "updatedAt";
+type DefaultDbTableInsert<Row> = Omit<Row, DbManagedRowKeys>;
+
+export interface ForgeMigration {
+  readonly id: string;
+  readonly sql: string;
+}
+
+export interface ForgeTableClient<
+  Row extends Record<string, unknown>,
+  Insert extends Record<string, unknown>,
+  Patch extends Record<string, unknown>,
+> {
+  readonly get: (id: string) => Promise<{ row: Row }>;
+  readonly insert: (data: Insert) => Promise<{ row: Row }>;
+  readonly update: (id: string, data: Patch, expectedVersion?: number) => Promise<{ row: Row }>;
+  readonly delete: (id: string, expectedVersion?: number) => Promise<{ ok: true }>;
+  readonly subscribe: (handlers: {
+    readonly onCreate?: (row: Row) => void;
+    readonly onUpdate?: (row: Row) => void;
+    readonly onDelete?: (id: string) => void;
+    readonly onEvent?: (event: SchemaRowChangeEvent) => void;
+    readonly onOpen?: () => void;
+    readonly onError?: (event: Event) => void;
+    readonly onClose?: (event: CloseEvent) => void;
+  }) => () => void;
+}
+
+interface TableMapping {
+  readonly name: string;
+  readonly encode: (value: Record<string, unknown>) => Record<string, unknown>;
+  readonly decode: <Row extends Record<string, unknown>>(value: Record<string, unknown>) => Row;
+}
+
+const stringTableMapping = (name: string): TableMapping => ({
+  name,
+  encode: (value) => value,
+  decode: (value) => value as never,
+});
+
+const drizzleTableMapping = (table: AnySQLiteTable): TableMapping => {
+  const columns = Object.entries(getTableColumns(table));
+  return {
+    name: getTableName(table),
+    encode: (value) =>
+      Object.fromEntries(
+        columns.flatMap(([property, column]) =>
+          value[property] === undefined
+            ? []
+            : [[column.name, column.mapToDriverValue(value[property])]],
+        ),
+      ),
+    decode: <Row extends Record<string, unknown>>(value: Record<string, unknown>): Row =>
+      Object.fromEntries(
+        columns.flatMap(([property, column]) => {
+          const driverValue = value[column.name];
+          return driverValue === undefined
+            ? []
+            : [[property, driverValue === null ? null : column.mapFromDriverValue(driverValue)]];
+        }),
+      ) as Row,
   };
 };
 
-export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions) {
+export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions) => {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const client = await Effect.runPromise(
     HttpApiClient.make(Api, { baseUrl: normalizedBaseUrl }).pipe(
@@ -96,6 +223,76 @@ export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions)
   );
 
   const site = SiteId.make(siteId);
+
+  function tableClient<Table extends AnySQLiteTable>(
+    table: Table,
+  ): ForgeTableClient<
+    Table["$inferSelect"],
+    Omit<Table["$inferInsert"], DbManagedRowKeys>,
+    Partial<Omit<Table["$inferInsert"], DbManagedRowKeys>>
+  >;
+  function tableClient<
+    Row extends Record<string, unknown> = Record<string, unknown>,
+    Insert extends Record<string, unknown> = DefaultDbTableInsert<Row>,
+    Patch extends Record<string, unknown> = Partial<Insert>,
+  >(name: string): ForgeTableClient<Row, Insert, Patch>;
+  function tableClient(
+    table: string | AnySQLiteTable,
+  ): ForgeTableClient<Record<string, unknown>, Record<string, unknown>, Record<string, unknown>> {
+    const mapping =
+      typeof table === "string" ? stringTableMapping(table) : drizzleTableMapping(table);
+    return {
+      get: (id) =>
+        Effect.runPromise(
+          client["server.schema"]["schema.rows.get"]({
+            params: { table: mapping.name, id },
+            query: { siteId: site },
+          }),
+        ).then(({ row }) => ({ row: mapping.decode(row) })),
+      insert: (data) =>
+        Effect.runPromise(
+          client["server.schema"]["schema.rows.insert"]({
+            params: { table: mapping.name },
+            payload: { siteId: site, data: mapping.encode(data) },
+          }),
+        ).then(({ row }) => ({ row: mapping.decode(row) })),
+      update: (id, data, expectedVersion) =>
+        Effect.runPromise(
+          client["server.schema"]["schema.rows.update"]({
+            params: { table: mapping.name, id },
+            payload: {
+              siteId: site,
+              data: mapping.encode(data),
+              ...(expectedVersion !== undefined ? { expectedVersion } : {}),
+            },
+          }),
+        ).then(({ row }) => ({ row: mapping.decode(row) })),
+      delete: (id, expectedVersion) =>
+        Effect.runPromise(
+          client["server.schema"]["schema.rows.delete"]({
+            params: { table: mapping.name, id },
+            query: {
+              siteId: site,
+              ...(expectedVersion !== undefined ? { expectedVersion } : {}),
+            },
+          }),
+        ),
+      subscribe: (handlers) =>
+        createRowSubscription(normalizedBaseUrl, siteId, mapping.name, {
+          ...(handlers.onCreate !== undefined
+            ? { onCreate: (row) => handlers.onCreate?.(mapping.decode(row)) }
+            : {}),
+          ...(handlers.onUpdate !== undefined
+            ? { onUpdate: (row) => handlers.onUpdate?.(mapping.decode(row)) }
+            : {}),
+          ...(handlers.onDelete !== undefined ? { onDelete: handlers.onDelete } : {}),
+          ...(handlers.onEvent !== undefined ? { onEvent: handlers.onEvent } : {}),
+          ...(handlers.onOpen !== undefined ? { onOpen: handlers.onOpen } : {}),
+          ...(handlers.onError !== undefined ? { onError: handlers.onError } : {}),
+          ...(handlers.onClose !== undefined ? { onClose: handlers.onClose } : {}),
+        }),
+    };
+  }
 
   return {
     webhook: (input: WebhookSendInput) =>
@@ -146,6 +343,13 @@ export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions)
             createDbSubscription(normalizedBaseUrl, siteId, collection, handlers),
         };
       },
+      applyMigrations: (deploymentId: string, migrations: ReadonlyArray<ForgeMigration>) =>
+        Effect.runPromise(
+          client["server.schema"]["schema.migrations.apply"]({
+            payload: { siteId: site, deploymentId, migrations: [...migrations] },
+          }),
+        ),
+      table: tableClient,
     },
     upload: (input: UploadInput) =>
       Effect.runPromise(
@@ -162,4 +366,4 @@ export async function createClient({ baseUrl, siteId = "" }: ForgeClientOptions)
       list: () => Effect.runPromise(client["server.plugins"]["plugins.list"]({})),
     },
   };
-}
+};

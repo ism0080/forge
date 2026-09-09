@@ -13,5 +13,11 @@
     "@ism0080/forge-core": "workspace:*",
     "@ism0080/forge-server": "workspace:*",
     "effect": "4.0.0-beta.80"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.45.2"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.2"
   }
 }
