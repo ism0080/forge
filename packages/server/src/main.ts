@@ -15,20 +15,32 @@ import { CorsMiddleware } from "./middleware/cors.js";
 
 const ServerLive = NodeHttpServer.layerConfig(() => createServer(), serverConfig);
 
+const InfrastructureLive = Layer.mergeAll(
+  SiteConnectionsLayer,
+  DbEventsInMemoryLayer,
+  NodeServices.layer,
+);
+
+const ApplicationServicesLive = Layer.merge(
+  InfrastructureLive,
+  Layer.mergeAll(
+    AppConfigLayer,
+    LocalFileStorageLayer,
+    DatabaseEngineLayer,
+    SchemaServiceLayer,
+    DbEventsConsoleTapLayer,
+    WebhookConfigLayer,
+    FetchHttpClient.layer,
+  ).pipe(Layer.provide(InfrastructureLive)),
+);
+
+const HttpLive = Layer.merge(
+  HttpRouter.layer,
+  CorsMiddleware.pipe(Layer.provide(HttpRouter.layer)),
+);
+
 const main = HttpRouter.serve(routes).pipe(
-  Layer.provideMerge(CorsMiddleware),
-  Layer.provide(ServerLive),
-  Layer.provide(AppConfigLayer),
-  Layer.provide(HttpRouter.layer),
-  Layer.provide(LocalFileStorageLayer),
-  Layer.provide(DatabaseEngineLayer),
-  Layer.provide(SchemaServiceLayer),
-  Layer.provide(SiteConnectionsLayer),
-  Layer.provide(DbEventsConsoleTapLayer),
-  Layer.provide(DbEventsInMemoryLayer),
-  Layer.provide(WebhookConfigLayer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(NodeServices.layer),
+  Layer.provide([ServerLive, HttpLive, ApplicationServicesLive]),
 );
 
 Layer.launch(main).pipe(NodeRuntime.runMain);

@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import type { StatementSync } from "node:sqlite";
-import { Context, Effect, Layer } from "effect";
+import { Cause, Context, Effect, Exit, Layer } from "effect";
 
 export interface SiteDb {
   readonly db: DatabaseSync;
@@ -27,14 +27,16 @@ export const prepareStatement = (site: SiteDb, sql: string): StatementSync => {
 
 export const runInTransaction = <A>(site: SiteDb, f: () => A): A => {
   site.db.exec("BEGIN IMMEDIATE");
-  try {
-    const result = f();
-    site.db.exec("COMMIT");
-    return result;
-  } catch (error) {
-    site.db.exec("ROLLBACK");
-    throw error;
-  }
+  return Exit.match(Effect.runSyncExit(Effect.sync(f)), {
+    onSuccess: (result) => {
+      site.db.exec("COMMIT");
+      return result;
+    },
+    onFailure: (cause) => {
+      site.db.exec("ROLLBACK");
+      throw Cause.squash(cause);
+    },
+  });
 };
 
 export interface SiteConnections {
@@ -56,12 +58,13 @@ export const makeSiteConnections = (): SiteConnections => {
       }
       const site = openConnection(file);
       if (init !== undefined) {
-        try {
-          init(site);
-        } catch (error) {
-          site.db.close();
-          throw error;
-        }
+        Exit.match(Effect.runSyncExit(Effect.sync(() => init(site))), {
+          onSuccess: () => undefined,
+          onFailure: (cause) => {
+            site.db.close();
+            throw Cause.squash(cause);
+          },
+        });
       }
       sites.set(key, site);
       return site;

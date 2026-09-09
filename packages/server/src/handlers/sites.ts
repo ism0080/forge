@@ -10,6 +10,10 @@ class SiteAssetNotFoundError extends Schema.TaggedErrorClass<SiteAssetNotFoundEr
   {},
 ) {}
 
+const SiteConfigFromJson = Schema.fromJsonString(
+  Schema.Struct({ spa: Schema.optional(Schema.Boolean) }),
+);
+
 const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
   const siteIds = Array.from(
     new Set(
@@ -135,17 +139,12 @@ export const SitesHandler = HttpApiBuilder.group(Api, "server.sites", (handlers)
               storage.getObject(siteBucket, `sites/${primarySiteId}/forge.json`),
               {
                 onSuccess: (data) =>
-                  Effect.try({
-                    try: () => {
-                      const parsed = JSON.parse(new TextDecoder().decode(data)) as unknown;
-                      if (typeof parsed !== "object" || parsed === null) {
-                        return false;
-                      }
-                      const config = parsed as { spa?: unknown };
-                      return config.spa === true;
-                    },
-                    catch: () => false,
-                  }).pipe(Effect.orElseSucceed(() => false)),
+                  Schema.decodeUnknownEffect(SiteConfigFromJson)(
+                    new TextDecoder().decode(data),
+                  ).pipe(
+                    Effect.map((config) => config.spa === true),
+                    Effect.orElseSucceed(() => false),
+                  ),
                 onFailure: () => Effect.succeed(false),
               },
             )

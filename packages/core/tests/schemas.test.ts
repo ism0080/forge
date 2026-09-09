@@ -55,8 +55,8 @@ describe("ForgeConfigSchema", () => {
 
 describe("ForgeConfigFromJson", () => {
   it("decodes a JSON string in one step", () => {
-    const json = JSON.stringify({
-      siteId: "demo",
+    const json = Schema.encodeSync(ForgeConfigFromJson)({
+      siteId: SiteId.make("demo"),
       entry: ".",
       apiBaseUrl: "https://example.com",
       spa: false,
@@ -91,7 +91,10 @@ describe("DbDocumentSchema", () => {
   });
 
   it("round-trips through JSON", () => {
-    const document = Schema.decodeUnknownSync(DbDocumentFromJson)(JSON.stringify(valid));
+    const json = Schema.encodeSync(DbDocumentFromJson)(
+      Schema.decodeUnknownSync(DbDocumentSchema)(valid),
+    );
+    const document = Schema.decodeUnknownSync(DbDocumentFromJson)(json);
     expect(document.siteId).toBe("site-a");
   });
 

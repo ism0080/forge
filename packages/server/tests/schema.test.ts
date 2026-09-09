@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
 import * as Result from "effect/Result";
 import { SiteId } from "@ism0080/forge-core";
 import {
@@ -40,6 +40,8 @@ const secondMigration = {
   sql: "ALTER TABLE users ADD COLUMN email TEXT",
 } as const;
 
+const ProfileFromJson = Schema.fromJsonString(Schema.Struct({ role: Schema.String }));
+
 const withSchema = <A, E>(
   effect: Effect.Effect<A, E, SchemaService | DbEventsService>,
   options: {
@@ -51,13 +53,13 @@ const withSchema = <A, E>(
     const fs = yield* Effect.service(FileSystem.FileSystem);
     const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
     const layer = Layer.merge(DbEventsInMemoryLayer, SchemaServiceLayer).pipe(
-      Layer.provide(DbEventsInMemoryLayer),
-      Layer.provide(
+      Layer.provide([
+        DbEventsInMemoryLayer,
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot, ...options.config }),
         ),
-      ),
-      Layer.provide(SiteConnectionsLayer),
+        SiteConnectionsLayer,
+      ]),
     );
     return yield* Effect.gen(function* () {
       const schema = yield* SchemaService;
@@ -245,7 +247,7 @@ describe("SchemaService rows", () => {
         const inserted = yield* schema.insertRow(siteId, "users", {
           name: "Amy",
           active: 1,
-          profile: JSON.stringify({ role: "admin" }),
+          profile: Schema.encodeSync(ProfileFromJson)({ role: "admin" }),
         });
         expect(inserted.version).toBe(1);
         expect(inserted.active).toBe(1);
@@ -316,11 +318,13 @@ describe("SchemaService events", () => {
         const received: Array<{ type: string; table: string; row?: Record<string, unknown> }> = [];
         const unsubscribe = yield* events.subscribe(
           (event) => {
-            if ("table" in event) {
+            if (typeof Reflect.get(event, "table") === "string") {
               received.push({
                 type: event.type,
-                table: event.table,
-                ...(event.row !== undefined ? { row: event.row } : {}),
+                table: String(Reflect.get(event, "table")),
+                ...(Reflect.get(event, "row") !== undefined
+                  ? { row: Reflect.get(event, "row") as Record<string, unknown> }
+                  : {}),
               });
             }
           },

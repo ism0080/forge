@@ -1,8 +1,9 @@
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Layer, Match, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
   CollectionId,
+  DbDocumentDataSchema,
   DbDocumentSchema,
   DbOperationError,
   DocumentId,
@@ -93,17 +94,14 @@ const CREATE_UPDATED_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS idx_documents_updated ON documents (collection, updated_at, id)";
 
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
+const DbDocumentDataFromJson = Schema.fromJsonString(DbDocumentDataSchema);
 
-const sortColumn = (sortBy: DbSortBy): string => {
-  switch (sortBy) {
-    case "createdAt":
-      return "created_at";
-    case "updatedAt":
-      return "updated_at";
-    case "id":
-      return "id";
-  }
-};
+const sortColumn = Match.type<DbSortBy>().pipe(
+  Match.when("createdAt", () => "created_at"),
+  Match.when("updatedAt", () => "updated_at"),
+  Match.when("id", () => "id"),
+  Match.exhaustive,
+);
 
 const buildFilterClause = (
   whereField: string,
@@ -179,7 +177,7 @@ const make = Effect.gen(function* () {
   ): Effect.Effect<DbDocument, DbOperationError> =>
     Effect.gen(function* () {
       const data = yield* Effect.try({
-        try: () => JSON.parse(row.data) as unknown,
+        try: () => Schema.decodeUnknownSync(DbDocumentDataFromJson)(row.data),
         catch: (cause) => new DbOperationError({ operation: "parseDocument", cause }),
       });
       return yield* Schema.decodeUnknownEffect(DbDocumentSchema)({
@@ -220,7 +218,13 @@ const make = Effect.gen(function* () {
             site,
             `INSERT INTO documents (collection, id, data, version, created_at, updated_at)
              VALUES (?, ?, ?, 1, ?, ?)`,
-          ).run(collection, id, JSON.stringify(document.data), createdAt, createdAt),
+          ).run(
+            collection,
+            id,
+            Schema.encodeSync(DbDocumentDataFromJson)(document.data),
+            createdAt,
+            createdAt,
+          ),
         );
 
         yield* events.publish({
@@ -294,7 +298,7 @@ const make = Effect.gen(function* () {
               `UPDATE documents
                SET data = ?, version = version + 1, updated_at = ?
                WHERE collection = ? AND id = ?`,
-            ).run(JSON.stringify(input.data), updatedAt, collection, id);
+            ).run(Schema.encodeSync(DbDocumentDataFromJson)(input.data), updatedAt, collection, id);
             return {
               _tag: "written",
               createdAt: row.created_at,
@@ -500,6 +504,5 @@ const make = Effect.gen(function* () {
 });
 
 export const SqliteDatabaseLayer = Layer.effect(DatabaseService, make).pipe(
-  Layer.provide(SqliteDatabaseConfigLayer),
-  Layer.provide(DbClockLayer),
+  Layer.provide([SqliteDatabaseConfigLayer, DbClockLayer]),
 );

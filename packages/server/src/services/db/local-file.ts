@@ -1,4 +1,4 @@
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Layer, Match, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -66,8 +66,14 @@ const compareDocs = (
   sortDir: DbSortDir,
 ): number => {
   const direction = sortDir === "asc" ? 1 : -1;
-  const left = sortBy === "id" ? a.id : sortBy === "updatedAt" ? a.updatedAt : a.createdAt;
-  const right = sortBy === "id" ? b.id : sortBy === "updatedAt" ? b.updatedAt : b.createdAt;
+  const valueForSort = Match.type<DbSortBy>().pipe(
+    Match.when("id", () => (document: DbDocument) => document.id),
+    Match.when("updatedAt", () => (document: DbDocument) => document.updatedAt),
+    Match.when("createdAt", () => (document: DbDocument) => document.createdAt),
+    Match.exhaustive,
+  );
+  const left = valueForSort(sortBy)(a);
+  const right = valueForSort(sortBy)(b);
   const cmp = left.localeCompare(right);
   if (cmp !== 0) {
     return cmp * direction;
@@ -151,7 +157,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const fullPath = documentPath(siteId, collection, document.id);
         yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
-        yield* fs.writeFileString(fullPath, `${JSON.stringify(document)}\n`);
+        yield* fs.writeFileString(fullPath, `${Schema.encodeSync(DbDocumentFromJson)(document)}\n`);
       }).pipe(
         Effect.mapError(
           (error) => new DbOperationError({ operation: "writeDocument", cause: error }),
@@ -180,7 +186,7 @@ const make = Effect.gen(function* () {
 
         const fullPath = documentPath(siteId, collection, id);
         yield* fs.makeDirectory(path.dirname(fullPath), { recursive: true });
-        yield* fs.writeFileString(fullPath, `${JSON.stringify(document)}\n`);
+        yield* fs.writeFileString(fullPath, `${Schema.encodeSync(DbDocumentFromJson)(document)}\n`);
         const at = yield* clock.currentTimeIso;
         yield* events.publish({
           type: "created",
@@ -358,6 +364,5 @@ const make = Effect.gen(function* () {
 });
 
 export const LocalFileDatabaseLayer = Layer.effect(DatabaseService, make).pipe(
-  Layer.provide(LocalFileDatabaseConfigLayer),
-  Layer.provide(DbClockLayer),
+  Layer.provide([LocalFileDatabaseConfigLayer, DbClockLayer]),
 );

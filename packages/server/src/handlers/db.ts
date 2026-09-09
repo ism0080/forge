@@ -1,6 +1,11 @@
 import type { DbDeleteInput, DbDocumentData, DbListQuery } from "@ism0080/forge-core";
-import { DocumentNotFoundError, VersionConflictError } from "@ism0080/forge-core";
-import { Effect, Queue, Stream } from "effect";
+import {
+  DbChangeEventSchema,
+  DocumentNotFoundError,
+  SchemaRowChangeEventSchema,
+  VersionConflictError,
+} from "@ism0080/forge-core";
+import { Effect, Queue, Schema, Stream } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "../api.js";
@@ -8,6 +13,9 @@ import { DbEventsService } from "../services/db/events.js";
 import { DatabaseService } from "../services/db/service.js";
 
 const DB_EVENT_SOCKET_BACKLOG = 256;
+const ForgeDbEventFromJson = Schema.fromJsonString(
+  Schema.Union([DbChangeEventSchema, SchemaRowChangeEventSchema]),
+);
 
 const isExpected = (error: unknown): boolean =>
   error instanceof DocumentNotFoundError || error instanceof VersionConflictError;
@@ -52,7 +60,10 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         const queue = yield* Queue.sliding<Uint8Array>(DB_EVENT_SOCKET_BACKLOG);
         const unsubscribe = yield* events.subscribe(
           (event) => {
-            Queue.offerUnsafe(queue, new TextEncoder().encode(JSON.stringify(event)));
+            Queue.offerUnsafe(
+              queue,
+              new TextEncoder().encode(Schema.encodeSync(ForgeDbEventFromJson)(event)),
+            );
           },
           {
             siteId: query.siteId,

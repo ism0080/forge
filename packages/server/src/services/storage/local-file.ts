@@ -1,4 +1,4 @@
-import { Config, Context, Effect, Layer, Option } from "effect";
+import { Config, Context, Effect, Layer, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { StorageError } from "@ism0080/forge-core";
@@ -30,6 +30,10 @@ const cleanKey = (key: string): string =>
     .split("/")
     .filter((segment) => segment.length > 0 && segment !== "." && segment !== "..")
     .join("/");
+
+const StorageMetadataFromJson = Schema.fromJsonString(
+  Schema.Struct({ contentType: Schema.String }),
+);
 
 const toStorageError =
   (operation: string, bucket: string, key: string) =>
@@ -67,7 +71,10 @@ const make = Effect.gen(function* () {
 
         if (contentType) {
           const metadataPath = `${fullPath}.meta.json`;
-          yield* fs.writeFileString(metadataPath, JSON.stringify({ contentType }));
+          yield* fs.writeFileString(
+            metadataPath,
+            Schema.encodeSync(StorageMetadataFromJson)({ contentType }),
+          );
         }
       }).pipe(Effect.mapError(toStorageError("putObject", bucket, key))),
   );

@@ -316,6 +316,7 @@ const make = Effect.gen(function* () {
         }
 
         const site = yield* openSite(siteId);
+        const appliedAt = yield* clock.currentTimeMs;
         const result = yield* Effect.try({
           try: () =>
             runInTransaction(site, () => {
@@ -367,7 +368,7 @@ const make = Effect.gen(function* () {
                 prepareStatement(site, INSERT_MIGRATION_SQL).run(
                   migration.id,
                   migration.hash,
-                  Date.now(),
+                  appliedAt,
                   Math.ceil(performance.now() - migrationStartedAt),
                   deploymentId,
                 );
@@ -583,6 +584,5 @@ const make = Effect.gen(function* () {
 });
 
 export const SchemaServiceLayer = Layer.effect(SchemaService, make).pipe(
-  Layer.provide(SchemaConfigLayer),
-  Layer.provide(DbClockLayer),
+  Layer.provide([SchemaConfigLayer, DbClockLayer]),
 );

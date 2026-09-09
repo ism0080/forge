@@ -27,11 +27,11 @@ const withDatabase = <A, E>(effect: Effect.Effect<A, E, DatabaseService>) =>
     const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
 
     const layer = SqliteDatabaseLayer.pipe(
-      Layer.provide(DbEventsInMemoryLayer),
-      Layer.provide(
+      Layer.provide([
+        DbEventsInMemoryLayer,
         ConfigProvider.layer(ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot })),
-      ),
-      Layer.provide(SiteConnectionsLayer),
+        SiteConnectionsLayer,
+      ]),
     );
 
     return yield* effect.pipe(Effect.provide(layer));
@@ -362,13 +362,13 @@ describe("DatabaseEngineLayer", () => {
       const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
 
       const layer = DatabaseEngineLayer.pipe(
-        Layer.provide(DbEventsInMemoryLayer),
-        Layer.provide(
+        Layer.provide([
+          DbEventsInMemoryLayer,
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot, DB_ENGINE: "sqlite" }),
           ),
-        ),
-        Layer.provide(SiteConnectionsLayer),
+          SiteConnectionsLayer,
+        ]),
       );
 
       yield* Effect.gen(function* () {
@@ -386,11 +386,11 @@ describe("DatabaseEngineLayer", () => {
       const fs = yield* Effect.service(FileSystem.FileSystem);
       const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
       const layer = DatabaseEngineLayer.pipe(
-        Layer.provide(DbEventsInMemoryLayer),
-        Layer.provide(
+        Layer.provide([
+          DbEventsInMemoryLayer,
           ConfigProvider.layer(ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot })),
-        ),
-        Layer.provide(SiteConnectionsLayer),
+          SiteConnectionsLayer,
+        ]),
       );
 
       yield* Effect.gen(function* () {
@@ -410,13 +410,13 @@ describe("DatabaseEngineLayer", () => {
       const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
 
       const layer = DatabaseEngineLayer.pipe(
-        Layer.provide(DbEventsInMemoryLayer),
-        Layer.provide(
+        Layer.provide([
+          DbEventsInMemoryLayer,
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot, DB_ENGINE: "file" }),
           ),
-        ),
-        Layer.provide(SiteConnectionsLayer),
+          SiteConnectionsLayer,
+        ]),
       );
 
       yield* Effect.gen(function* () {

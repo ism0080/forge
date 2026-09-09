@@ -31,10 +31,10 @@ const matchesFilter = (event: ForgeDbEvent, filter?: DbEventFilter): boolean => 
     return false;
   }
   if (filter.collection !== undefined) {
-    return "collection" in event && event.collection === filter.collection;
+    return Reflect.get(event, "collection") === filter.collection;
   }
   if (filter.table !== undefined) {
-    return "table" in event && event.table === filter.table;
+    return Reflect.get(event, "table") === filter.table;
   }
   return true;
 };
@@ -49,11 +49,11 @@ export const DbEventsInMemoryLayer = Layer.sync(DbEventsService, () => {
           if (!matchesFilter(event, entry.filter)) {
             continue;
           }
-          try {
-            entry.listener(event);
-          } catch {
-            // listener failures are isolated from publisher
-          }
+          Effect.runSync(
+            Effect.try({ try: () => entry.listener(event), catch: () => undefined }).pipe(
+              Effect.ignore,
+            ),
+          );
         }
       }),
     subscribe: (listener, filter) =>
@@ -68,7 +68,9 @@ export const DbEventsInMemoryLayer = Layer.sync(DbEventsService, () => {
 });
 
 const eventScope = (event: ForgeDbEvent): string =>
-  "collection" in event ? event.collection : `tables/${event.table}`;
+  typeof Reflect.get(event, "collection") === "string"
+    ? Reflect.get(event, "collection")
+    : `tables/${String(Reflect.get(event, "table"))}`;
 
 export const DbEventsConsoleTapLayer = Layer.effectDiscard(
   Effect.gen(function* () {
