@@ -3,9 +3,15 @@
   "compilerOptions": {
     "composite": false,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["node"],
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
-  "include": ["packages/*/tests/**/*.ts", "packages/*/src/**/*.ts", "vitest.config.ts"],
+  "include": [
+    "packages/*/tests/**/*.ts",
+    "packages/*/src/**/*.ts",
+    "packages/tools/*/tests/**/*.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["packages/templates/src/template-files"]
 }

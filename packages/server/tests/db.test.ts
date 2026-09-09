@@ -22,10 +22,10 @@ const withDatabase = <A, E>(effect: Effect.Effect<A, E, DatabaseService>) =>
     const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
 
     const layer = LocalFileDatabaseLayer.pipe(
-      Layer.provide(DbEventsInMemoryLayer),
-      Layer.provide(
+      Layer.provide([
+        DbEventsInMemoryLayer,
         ConfigProvider.layer(ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot })),
-      ),
+      ]),
     );
 
     return yield* effect.pipe(Effect.provide(layer));

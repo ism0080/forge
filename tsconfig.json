@@ -6,6 +6,7 @@
     { "path": "./packages/templates" },
     { "path": "./packages/sdk" },
     { "path": "./packages/server" },
-    { "path": "./packages/cli" }
+    { "path": "./packages/cli" },
+    { "path": "./packages/tools/oxlint" }
   ]
 }

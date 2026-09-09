@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": [
+    "catalog.ts",
+    "config.ts",
+    "index.ts",
+    "profiles.ts",
+    "registry.ts",
+    "rules/**/*.ts",
+    "shared/**/*.ts"
+  ],
+  "exclude": ["dist", "tests"]
+}
