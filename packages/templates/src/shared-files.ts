@@ -9,7 +9,15 @@ export const sharedFiles: ReadonlyArray<TemplateFile> = [
     content: read(".gitignore"),
   },
   {
-    path: ".oxlintrc.json",
-    content: read(".oxlintrc.json"),
+    path: ".npmrc",
+    content: read(".npmrc"),
+  },
+  {
+    path: "AGENTS.md",
+    content: read("AGENTS.md"),
+  },
+  {
+    path: "oxlint.config.ts",
+    content: read("oxlint.config.ts"),
   },
 ];

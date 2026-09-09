@@ -1,3 +1,10 @@
 {
-  "extends": "@total-typescript/tsconfig/bundler/dom/app"
+  "extends": "@total-typescript/tsconfig/bundler/dom/app",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "exclude": ["dist", "node_modules"]
 }

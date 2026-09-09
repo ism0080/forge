@@ -1,6 +1,13 @@
-import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import { createClient } from "@ism0080/forge-sdk";
 
-export const Route = createRootRoute({
+export interface RouterContext {
+  queryClient: QueryClient;
+  client: Awaited<ReturnType<typeof createClient>>;
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootComponent,
 });
 

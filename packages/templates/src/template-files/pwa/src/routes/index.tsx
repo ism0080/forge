@@ -30,11 +30,11 @@ function Home() {
 
   return (
     <main className="min-h-screen bg-background p-6 text-foreground">
-      <h1 className="mb-4 text-2xl font-bold">{{ siteId }}</h1>
+      <h1 className="mb-4 text-2xl font-bold">{"{{siteId}}"}</h1>
       <p className="mb-4 text-muted-foreground">
-        Powered by Forge, React, coss ui, TanStack Query and Router.
+        Powered by Forge, React, shadcn/ui, TanStack Query and Router.
       </p>
-      <Button onClick={() => createNote.mutate()} disabled={createNote.isPending}>
+      <Button onClick={() => createNote.mutate()} loading={createNote.isPending}>
         Add note
       </Button>
       {isLoading && <p className="mt-4 text-muted-foreground">Loading...</p>}
@@ -51,7 +51,7 @@ function Home() {
               variant="destructive"
               size="sm"
               onClick={() => deleteNote.mutate(doc.id)}
-              disabled={deleteNote.isPending}
+              loading={deleteNote.isPending}
             >
               Delete
             </Button>

@@ -13,5 +13,5 @@
     "packages/tools/*/tests/**/*.ts",
     "vitest.config.ts"
   ],
-  "exclude": ["packages/templates/src/template-files"]
+  "exclude": ["packages/templates/src/shared", "packages/templates/src/template-files"]
 }

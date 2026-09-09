@@ -8,9 +8,13 @@ const read = (name: string) =>
 export const pwaTemplate: Template = {
   id: "pwa",
   name: "PWA",
-  description: "A React PWA starter with Vite, Tailwind CSS v4, vite-plugin-pwa, and coss ui.",
+  description: "A React PWA starter with Vite, Tailwind CSS v4, vite-plugin-pwa, and shadcn/ui.",
   files: [
     ...sharedFiles,
+    {
+      path: "oxlint.config.ts",
+      content: read("oxlint.config.ts"),
+    },
     {
       path: "index.html",
       content: read("index.html"),

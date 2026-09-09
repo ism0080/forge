@@ -12,10 +12,11 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@ism0080/forge-sdk": "latest"
+    "@ism0080/forge-sdk": "^0.1.4"
   },
   "devDependencies": {
-    "@ism0080/forge-vite-plugin": "latest",
+    "@ism0080/forge-vite-plugin": "^0.1.4",
+    "@ism0080/oxlint-plugin-forge": "^0.1.1",
     "@total-typescript/tsconfig": "^1.0.4",
     "oxfmt": "^0.54.0",
     "oxlint": "^1.69.0",

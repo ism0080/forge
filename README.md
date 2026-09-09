@@ -52,9 +52,9 @@ forge init --template pwa my-app
 Available templates:
 
 - `default`: minimal Vite + TypeScript site with oxlint, oxfmt, and Forge SDK
-- `pwa`: React PWA starter with Vite, Tailwind CSS v4, [TanStack Query](https://tanstack.com/query), [TanStack Router](https://tanstack.com/router), [vite-plugin-pwa](https://vite-pwa-org.netlify.app/), and [coss ui](https://coss.com/ui)
+- `pwa`: React PWA starter with Vite, Tailwind CSS v4, [TanStack Query](https://tanstack.com/query), [TanStack Router](https://tanstack.com/router), [vite-plugin-pwa](https://vite-pwa-org.netlify.app/), and [shadcn/ui](https://ui.shadcn.com)
 
-Lint/format config (`.oxlintrc.json`, `.gitignore`) is shared from `packages/templates/src/shared`, while `tsconfig.json` and `package.json` are template-specific. Generated apps extend `@total-typescript/tsconfig/bundler/dom/app`.
+Lint/format config (`oxlint.config.ts`, `.gitignore`) is shared from `packages/templates/src/shared`, while `tsconfig.json` and `package.json` are template-specific. Generated apps extend `@total-typescript/tsconfig/bundler/dom/app`.
 
 ## Build and run CLI
 
