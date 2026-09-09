@@ -52,12 +52,28 @@ export const pwaTemplate: Template = {
       content: read("src/lib/utils.ts"),
     },
     {
+      path: "src/lib/use-theme.ts",
+      content: read("src/lib/use-theme.ts"),
+    },
+    {
       path: "src/components/ui/spinner.tsx",
       content: read("src/components/ui/spinner.tsx"),
     },
     {
       path: "src/components/ui/button.tsx",
       content: read("src/components/ui/button.tsx"),
+    },
+    {
+      path: "src/components/ui/badge.tsx",
+      content: read("src/components/ui/badge.tsx"),
+    },
+    {
+      path: "src/components/ui/card.tsx",
+      content: read("src/components/ui/card.tsx"),
+    },
+    {
+      path: "src/components/ui/input.tsx",
+      content: read("src/components/ui/input.tsx"),
     },
   ],
 };
