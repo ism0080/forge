@@ -14,6 +14,10 @@ const SiteConfigFromJson = Schema.fromJsonString(
   Schema.Struct({ spa: Schema.optional(Schema.Boolean) }),
 );
 
+const toInternalError = (error: unknown): { readonly error: string } => ({
+  error: error instanceof Error ? error.message : String(error),
+});
+
 const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
   const siteIds = Array.from(
     new Set(
@@ -38,7 +42,8 @@ const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
       : siteIds
           .map((siteId) => {
             const safe = escapeHtml(siteId);
-            return `<li><a href="/s/${safe}/">${safe}</a></li>`;
+            const encoded = encodeURIComponent(siteId);
+            return `<li><a href="/s/${safe}/">${safe}</a> <button type="button" data-site="${encoded}">Delete</button></li>`;
           })
           .join("");
 
@@ -53,8 +58,10 @@ const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
       h1 { margin-bottom: 0.5rem; }
       p { color: #444; }
       ul { line-height: 1.8; }
+      li { display: flex; align-items: center; gap: 0.75rem; }
       a { color: #0b63f6; text-decoration: none; }
       a:hover { text-decoration: underline; }
+      button { font: inherit; padding: 0.1rem 0.5rem; cursor: pointer; }
       code { background: #f3f4f6; padding: 0.15rem 0.35rem; border-radius: 4px; }
     </style>
   </head>
@@ -62,6 +69,25 @@ const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
     <h1>Deployed Forge Sites</h1>
     <p>Open any site via <code>/s/&lt;siteId&gt;/</code></p>
     <ul>${items}</ul>
+    <script>
+      document.querySelectorAll("button[data-site]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const siteId = decodeURIComponent(button.dataset.site);
+          if (!confirm("Delete site \\"" + siteId + "\\"? This cannot be undone.")) return;
+          button.disabled = true;
+          try {
+            const response = await fetch("/directory/" + encodeURIComponent(siteId), { method: "DELETE" });
+            if (!response.ok) {
+              throw new Error("HTTP " + response.status);
+            }
+            location.reload();
+          } catch (error) {
+            button.disabled = false;
+            alert("Failed to delete site: " + error);
+          }
+        });
+      });
+    </script>
   </body>
 </html>`;
 };
@@ -89,13 +115,11 @@ export const SitesHandler = HttpApiBuilder.group(Api, "server.sites", (handlers)
         const { siteBucket } = yield* AppConfigService;
         const storage = yield* StorageService;
 
-        return yield* Effect.matchEffect(storage.listKeys(siteBucket, "sites/"), {
-          onSuccess: (keys) => Effect.succeed(buildDirectoryHtml(keys)),
-          onFailure: (error) =>
-            Effect.fail({
-              error: error instanceof Error ? error.message : String(error),
-            }),
-        });
+        const keys = yield* storage
+          .listKeys(siteBucket, "sites/")
+          .pipe(Effect.mapError(toInternalError));
+
+        return yield* Effect.succeed(buildDirectoryHtml(keys));
       }),
     )
     .handle("sites.get", ({ request }) =>
@@ -176,6 +200,27 @@ export const SitesHandler = HttpApiBuilder.group(Api, "server.sites", (handlers)
             ),
           onFailure: () => Effect.fail({ error: "not found" as const }),
         });
+      }),
+    )
+    .handle("sites.delete", ({ params }) =>
+      Effect.gen(function* () {
+        const { siteBucket } = yield* AppConfigService;
+        const storage = yield* StorageService;
+
+        const keys = yield* storage
+          .listKeys(siteBucket, `sites/${params.siteId}/`)
+          .pipe(Effect.mapError(toInternalError));
+
+        if (keys.length === 0) {
+          return yield* Effect.fail({ error: "not found" as const });
+        }
+
+        return yield* storage
+          .deletePrefix(siteBucket, `sites/${params.siteId}`)
+          .pipe(
+            Effect.mapError(toInternalError),
+            Effect.map(() => ({ ok: true as const })),
+          );
       }),
     ),
 );

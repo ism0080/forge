@@ -13,6 +13,10 @@ export interface StorageApi {
     bucket: string,
     prefix: string,
   ) => Effect.Effect<ReadonlyArray<string>, StorageError>;
+  readonly deletePrefix: (
+    bucket: string,
+    prefix: string,
+  ) => Effect.Effect<void, StorageError>;
 }
 
 export class StorageService extends Context.Service<StorageService, StorageApi>()(

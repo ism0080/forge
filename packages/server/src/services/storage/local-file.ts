@@ -113,10 +113,22 @@ const make = Effect.gen(function* () {
       }).pipe(Effect.mapError(toStorageError("listKeys", bucket, prefix))),
   );
 
+  const deletePrefix = Effect.fn("Storage.deletePrefix")(
+    (bucket: string, prefix: string): Effect.Effect<void, StorageError> =>
+      Effect.gen(function* () {
+        const targetPath = objectPath(bucket, prefix);
+        const exists = yield* fs.exists(targetPath).pipe(Effect.orElseSucceed(() => false));
+        if (exists) {
+          yield* fs.remove(targetPath, { recursive: true });
+        }
+      }).pipe(Effect.mapError(toStorageError("deletePrefix", bucket, prefix))),
+  );
+
   return {
     putObject,
     getObject,
     listKeys,
+    deletePrefix,
   } satisfies StorageApi;
 });
 
