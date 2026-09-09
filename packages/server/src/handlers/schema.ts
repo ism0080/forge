@@ -45,6 +45,24 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
           );
       }),
     )
+    .handle("schema.rows.list", ({ params, query }) =>
+      Effect.gen(function* () {
+        const schema = yield* SchemaService;
+        return yield* schema
+          .listRows(query.siteId, params.table, {
+            ...(query.limit !== undefined ? { limit: query.limit } : {}),
+            ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+            ...(query.sortDir !== undefined ? { sortDir: query.sortDir } : {}),
+          })
+          .pipe(
+            Effect.tapError(tapUnexpected),
+            Effect.mapError(mapSchemaError),
+            Effect.map(({ rows, nextCursor }) =>
+              nextCursor !== undefined ? { rows: [...rows], nextCursor } : { rows: [...rows] },
+            ),
+          );
+      }),
+    )
     .handle("schema.rows.get", ({ params, query }) =>
       Effect.gen(function* () {
         const schema = yield* SchemaService;

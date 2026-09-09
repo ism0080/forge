@@ -163,6 +163,11 @@ export interface ForgeTableClient<
   Insert extends Record<string, unknown>,
   Patch extends Record<string, unknown>,
 > {
+  readonly list: (query?: {
+    readonly limit?: number;
+    readonly cursor?: string;
+    readonly sortDir?: "asc" | "desc";
+  }) => Promise<{ rows: Row[]; nextCursor?: string }>;
   readonly get: (id: string) => Promise<{ row: Row }>;
   readonly insert: (data: Insert) => Promise<{ row: Row }>;
   readonly update: (id: string, data: Patch, expectedVersion?: number) => Promise<{ row: Row }>;
@@ -242,6 +247,21 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
     const mapping =
       typeof table === "string" ? stringTableMapping(table) : drizzleTableMapping(table);
     return {
+      list: (query) =>
+        Effect.runPromise(
+          client["server.schema"]["schema.rows.list"]({
+            params: { table: mapping.name },
+            query: {
+              siteId: site,
+              ...(query?.limit !== undefined ? { limit: query.limit } : {}),
+              ...(query?.cursor !== undefined ? { cursor: query.cursor } : {}),
+              ...(query?.sortDir !== undefined ? { sortDir: query.sortDir } : {}),
+            },
+          }),
+        ).then(({ rows, nextCursor }) => ({
+          rows: rows.map((row) => mapping.decode(row)),
+          ...(nextCursor !== undefined ? { nextCursor } : {}),
+        })),
       get: (id) =>
         Effect.runPromise(
           client["server.schema"]["schema.rows.get"]({

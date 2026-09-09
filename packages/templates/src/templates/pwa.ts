@@ -32,6 +32,30 @@ export const pwaTemplate: Template = {
       content: read("vite.config.ts"),
     },
     {
+      path: "drizzle.config.ts",
+      content: read("drizzle.config.ts"),
+    },
+    {
+      path: "src/db/schema.ts",
+      content: read("src/db/schema.ts"),
+    },
+    {
+      path: "drizzle/0000_create_notes.sql",
+      content: read("drizzle/0000_create_notes.sql"),
+    },
+    {
+      path: "drizzle/meta/_journal.json",
+      content: read("drizzle/meta/_journal.json"),
+    },
+    {
+      path: "drizzle/meta/0000_snapshot.json",
+      content: read("drizzle/meta/0000_snapshot.json"),
+    },
+    {
+      path: "README.md",
+      content: read("README.md"),
+    },
+    {
       path: "src/globals.css",
       content: read("src/globals.css"),
     },

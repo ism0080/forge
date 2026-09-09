@@ -307,6 +307,92 @@ describe("SchemaService rows", () => {
       }),
     ),
   );
+
+  it.effect("lists rows ordered by created_at with keyset pagination", () =>
+    withSchema(
+      Effect.gen(function* () {
+        const schema = yield* SchemaService;
+        const rows: Array<Record<string, unknown>> = [];
+        for (let index = 0; index < 5; index += 1) {
+          rows.push(yield* schema.insertRow(siteId, "users", { name: `User ${index}` }));
+        }
+
+        const first = yield* schema.listRows(siteId, "users", { limit: 2, sortDir: "asc" });
+        expect(first.rows.map((row) => row.name)).toEqual(["User 0", "User 1"]);
+        expect(first.nextCursor).toBeTypeOf("string");
+
+        const second = yield* schema.listRows(siteId, "users", {
+          limit: 2,
+          sortDir: "asc",
+          cursor: first.nextCursor,
+        });
+        expect(second.rows.map((row) => row.name)).toEqual(["User 2", "User 3"]);
+
+        const third = yield* schema.listRows(siteId, "users", {
+          limit: 2,
+          sortDir: "asc",
+          cursor: second.nextCursor,
+        });
+        expect(third.rows.map((row) => row.name)).toEqual(["User 4"]);
+        expect(third.nextCursor).toBeUndefined();
+      }),
+    ),
+  );
+
+  it.effect("lists rows in descending order by default", () =>
+    withSchema(
+      Effect.gen(function* () {
+        const schema = yield* SchemaService;
+        for (let index = 0; index < 3; index += 1) {
+          yield* schema.insertRow(siteId, "users", { name: `User ${index}` });
+        }
+        const result = yield* schema.listRows(siteId, "users");
+        expect(result.rows.map((row) => row.name)).toEqual(["User 2", "User 1", "User 0"]);
+      }),
+    ),
+  );
+
+  it.effect("keyset pagination does not duplicate or skip rows with tied created_at", () =>
+    withSchema(
+      Effect.gen(function* () {
+        const schema = yield* SchemaService;
+        yield* schema.applyMigrations(
+          siteId,
+          [
+            initialMigration,
+            {
+              id: "0003_seed",
+              sql: `INSERT INTO users (id, version, createdAt, updatedAt, name) VALUES
+                ('seed-1', 1, 100, 100, 'A'),
+                ('seed-2', 1, 100, 100, 'B'),
+                ('seed-3', 1, 100, 100, 'C'),
+                ('seed-4', 1, 100, 100, 'D'),
+                ('seed-5', 1, 100, 100, 'E')`,
+            },
+          ],
+          "seed-deployment",
+        );
+
+        const first = yield* schema.listRows(siteId, "users", { limit: 2, sortDir: "asc" });
+        expect(first.rows.map((row) => row.name)).toEqual(["A", "B"]);
+
+        const second = yield* schema.listRows(siteId, "users", {
+          limit: 2,
+          sortDir: "asc",
+          cursor: first.nextCursor,
+        });
+        expect(second.rows.map((row) => row.name)).toEqual(["C", "D"]);
+
+        const third = yield* schema.listRows(siteId, "users", {
+          limit: 2,
+          sortDir: "asc",
+          cursor: second.nextCursor,
+        });
+        expect(third.rows.map((row) => row.name)).toEqual(["E"]);
+        expect(third.nextCursor).toBeUndefined();
+      }),
+    ),
+  );
 });
 
 describe("SchemaService events", () => {

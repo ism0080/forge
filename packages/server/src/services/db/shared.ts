@@ -47,7 +47,7 @@ export const randomId: Effect.Effect<string> = Effect.gen(function* () {
     .padStart(8, "0")}`;
 });
 
-export const parseLimit = (query?: DbListQuery): number => {
+export const parseLimit = (query?: { readonly limit?: number | undefined }): number => {
   const raw = query?.limit;
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
     return 50;

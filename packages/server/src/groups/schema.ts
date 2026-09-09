@@ -1,4 +1,4 @@
-import { SiteId } from "@ism0080/forge-core";
+import { SchemaListQuerySchema, SchemaListResponseSchema, SiteId } from "@ism0080/forge-core";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
@@ -50,6 +50,12 @@ export const SchemaGroup = HttpApiGroup.make("server.schema").add(
       deploymentId: Schema.String,
       migrations: Schema.Array(MigrationSchema),
     }),
+  }),
+  HttpApiEndpoint.get("schema.rows.list", "/api/tables/:table", {
+    success: SchemaListResponseSchema,
+    error: SchemaError,
+    params: Schema.Struct({ table: Schema.String }),
+    query: SchemaListQuerySchema,
   }),
   HttpApiEndpoint.get("schema.rows.get", "/api/tables/:table/:id", {
     success: RowResponseSchema,

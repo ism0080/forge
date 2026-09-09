@@ -3,7 +3,7 @@ import { Config, Context, Effect, Layer, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { DbOperationError, DocumentId, SiteId } from "@ism0080/forge-core";
-import { DbClockLayer, DbClockService, randomId, siteStorageKey } from "./shared.js";
+import { DbClockLayer, DbClockService, parseLimit, randomId, siteStorageKey } from "./shared.js";
 import { prepareStatement, runInTransaction, SiteConnectionsService } from "./sqlite-connection.js";
 import type { SiteDb } from "./sqlite-connection.js";
 import { DbEventsService } from "./events.js";
@@ -97,6 +97,18 @@ export interface SchemaApi {
     Record<string, unknown> | undefined,
     SchemaInvalidInputError | DbOperationError
   >;
+  readonly listRows: (
+    siteId: SiteId,
+    table: string,
+    query?: {
+      readonly limit?: number | undefined;
+      readonly cursor?: string | undefined;
+      readonly sortDir?: "asc" | "desc" | undefined;
+    },
+  ) => Effect.Effect<
+    { rows: ReadonlyArray<Record<string, unknown>>; nextCursor?: string },
+    SchemaInvalidInputError | DbOperationError
+  >;
   readonly insertRow: (
     siteId: SiteId,
     table: string,
@@ -162,6 +174,41 @@ const SchemaConfigLayer = Layer.effect(
 );
 
 const quoteIdentifier = (identifier: string): string => `"${identifier}"`;
+
+const ListCursorFromJson = Schema.fromJsonString(
+  Schema.Struct({
+    created: Schema.String,
+    id: Schema.String,
+  }),
+);
+
+const makeListCursor = (created: unknown, id: unknown): string | undefined => {
+  if (created === undefined || created === null || id === undefined || id === null) {
+    return undefined;
+  }
+  return Schema.encodeSync(ListCursorFromJson)({
+    created: String(created),
+    id: String(id),
+  });
+};
+
+const parseListCursor = (
+  cursor: string | undefined,
+  createdColumn: string,
+  comparator: ">" | "<",
+): Effect.Effect<{ readonly sql: string; readonly params: Array<string> }> =>
+  cursor === undefined
+    ? Effect.succeed({ sql: "", params: [] })
+    : Schema.decodeUnknownEffect(ListCursorFromJson)(cursor).pipe(
+        Effect.matchEffect({
+          onFailure: () => Effect.succeed({ sql: "", params: [] }),
+          onSuccess: ({ created, id }) =>
+            Effect.succeed({
+              sql: `AND (${quoteIdentifier(createdColumn)} ${comparator} ? OR (${quoteIdentifier(createdColumn)} = ? AND ${quoteIdentifier("id")} ${comparator} ?))`,
+              params: [created, created, id],
+            }),
+        }),
+      );
 
 const validateTableIdentifier = (table: string): void => {
   if (!SAFE_IDENTIFIER_PATTERN.test(table) || table.startsWith(INTERNAL_TABLE_PREFIX)) {
@@ -402,6 +449,64 @@ const make = Effect.gen(function* () {
       }),
   );
 
+  const listRows = Effect.fn("Schema.listRows")(
+    (
+      siteId: SiteId,
+      table: string,
+      query?: {
+        readonly limit?: number | undefined;
+        readonly cursor?: string | undefined;
+        readonly sortDir?: "asc" | "desc" | undefined;
+      },
+    ): Effect.Effect<
+      { rows: ReadonlyArray<Record<string, unknown>>; nextCursor?: string },
+      SchemaInvalidInputError | DbOperationError
+    > =>
+      Effect.gen(function* () {
+        const site = yield* openSite(siteId);
+        const columns = yield* getTableColumns(site, table);
+        const createdColumn = columns.has("created_at")
+          ? "created_at"
+          : columns.has("createdAt")
+            ? "createdAt"
+            : undefined;
+        if (createdColumn === undefined) {
+          return yield* new SchemaInvalidInputError({
+            message: `table "${table}" must have a created_at or createdAt column to list rows`,
+          });
+        }
+
+        const limit = parseLimit(query);
+        const sortDir = query?.sortDir === "asc" ? "ASC" : "DESC";
+        const comparator = query?.sortDir === "asc" ? ">" : "<";
+
+        const keyset = yield* parseListCursor(query?.cursor, createdColumn, comparator);
+
+        const sql = `SELECT * FROM ${quoteIdentifier(table)}
+          WHERE 1 = 1 ${keyset.sql}
+          ORDER BY ${quoteIdentifier(createdColumn)} ${sortDir}, ${quoteIdentifier("id")} ${sortDir}
+          LIMIT ?`;
+
+        const rows = yield* runSync(
+          "listRows",
+          () =>
+            prepareStatement(site, sql).all(...keyset.params, limit + 1) as ReadonlyArray<
+              Record<string, unknown>
+            >,
+        );
+
+        const hasMore = rows.length > limit;
+        const page = hasMore ? rows.slice(0, limit) : rows;
+        const tail = page[page.length - 1];
+        const nextCursor =
+          hasMore && tail !== undefined
+            ? makeListCursor(tail[createdColumn], tail.id)
+            : undefined;
+
+        return nextCursor !== undefined ? { rows: page, nextCursor } : { rows: page };
+      }),
+  );
+
   const insertRow = Effect.fn("Schema.insertRow")(
     (
       siteId: SiteId,
@@ -580,7 +685,7 @@ const make = Effect.gen(function* () {
       }),
   );
 
-  return { applyMigrations, getRow, insertRow, updateRow, deleteRow } satisfies SchemaApi;
+  return { applyMigrations, getRow, listRows, insertRow, updateRow, deleteRow } satisfies SchemaApi;
 });
 
 export const SchemaServiceLayer = Layer.effect(SchemaService, make).pipe(

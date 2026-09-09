@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { notes } from "@/db/schema";
 
 const routeApi = getRouteApi("/");
 
@@ -15,17 +16,17 @@ export const Route = createFileRoute("/")({
 function Home() {
   const { client } = routeApi.useRouteContext();
   const queryClient = useQueryClient();
-  const notes = client.db.collection("notes");
+  const notesTable = client.db.table(notes);
   const [text, setText] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["notes"],
-    queryFn: () => notes.list({ sortBy: "createdAt", sortDir: "desc" }),
+    queryFn: () => notesTable.list({ sortDir: "desc" }),
   });
 
   const createNote = useMutation({
-    mutationFn: () =>
-      notes.create({ data: { text: text || `Note ${new Date().toLocaleTimeString()}` } }),
+    mutationFn: (body: string) =>
+      notesTable.insert({ body: body || `Note ${new Date().toLocaleTimeString()}` }),
     onSuccess: () => {
       setText("");
       queryClient.invalidateQueries({ queryKey: ["notes"] });
@@ -33,13 +34,13 @@ function Home() {
   });
 
   const deleteNote = useMutation({
-    mutationFn: (id: string) => notes.delete(id),
+    mutationFn: (id: string) => notesTable.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notes"] }),
   });
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    createNote.mutate();
+    createNote.mutate(text);
   };
 
   return (
@@ -48,7 +49,7 @@ function Home() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{"{{siteId}}"}</CardTitle>
-            <Badge>Offline ready</Badge>
+            <Badge>SQLite backed</Badge>
           </div>
           <CardDescription>
             Powered by Forge, React, shadcn/ui, TanStack Query and Router.
@@ -70,21 +71,22 @@ function Home() {
           {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
           {error && (
             <p className="text-sm text-destructive">
-              Could not connect to the Forge server. Run `forge dev` to start it.
+              Could not reach the Forge database. Run `forge db push` or `forge deploy` to apply
+              the notes migration.
             </p>
           )}
 
           <ul className="space-y-2">
-            {data?.documents.map((doc) => (
+            {data?.rows.map((note) => (
               <li
-                key={doc.id}
+                key={note.id}
                 className="flex items-center justify-between rounded-lg border p-3"
               >
-                <span className="text-sm">{String(doc.data.text ?? "")}</span>
+                <span className="text-sm">{note.body}</span>
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => deleteNote.mutate(doc.id)}
+                  onClick={() => deleteNote.mutate(note.id)}
                   loading={deleteNote.isPending}
                 >
                   Delete

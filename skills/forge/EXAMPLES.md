@@ -260,6 +260,15 @@ const updated = await messageTable.update(
 await messageTable.delete(inserted.row.id, updated.row.version);
 ```
 
+List rows with keyset pagination, newest first by default:
+
+```ts
+const { rows, nextCursor } = await messageTable.list({ sortDir: "desc", limit: 20 });
+// rows: Array<MessageRow>; nextCursor: string | undefined
+```
+
+`list` orders by the table's `created_at`/`createdAt` column (using `id` as a tiebreaker), supports `limit`, `cursor`, and `sortDir` (`asc`/`desc`), and returns the raw managed columns decoded through the Drizzle table mapping. Pass `nextCursor` back as `cursor` to fetch the next page. Tables without a `created_at` or `createdAt` column cannot be listed.
+
 Forge manages `id`, `version`, `createdAt`, and `updatedAt`; define all four columns in tables used through `client.db.table()`. Errors surface as HTTP status codes: `400` for invalid input or migration history, `404` for missing rows, and `409` for version conflicts.
 
 ## Local registry

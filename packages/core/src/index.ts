@@ -194,6 +194,20 @@ export const SchemaRowChangeEventSchema = Schema.Struct({
 });
 export type SchemaRowChangeEvent = Schema.Schema.Type<typeof SchemaRowChangeEventSchema>;
 
+export const SchemaListQuerySchema = Schema.Struct({
+  siteId: SiteId,
+  limit: Schema.optional(Schema.NumberFromString),
+  cursor: Schema.optional(Schema.String),
+  sortDir: Schema.optional(DbSortDirSchema),
+});
+export type SchemaListQuery = Omit<Schema.Schema.Type<typeof SchemaListQuerySchema>, "siteId">;
+
+export const SchemaListResponseSchema = Schema.Struct({
+  rows: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+  nextCursor: Schema.optional(Schema.String),
+});
+export type SchemaListResponse = Schema.Schema.Type<typeof SchemaListResponseSchema>;
+
 export const DbListResponseSchema = Schema.Struct({
   documents: Schema.Array(DbDocumentSchema),
   nextCursor: Schema.optional(Schema.String),
