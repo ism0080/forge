@@ -223,6 +223,47 @@ describe("SqliteDatabaseLayer", () => {
     ),
   );
 
+  it.effect("searches documents with full-text search and keeps the index in sync", () =>
+    withDatabase(
+      Effect.gen(function* () {
+        const database = yield* DatabaseService;
+
+        const alpha = yield* database.createDocument(siteId, collection, {
+          data: { title: "Alpha release notes", body: "shipped the alpha" },
+        });
+        yield* database.createDocument(siteId, collection, {
+          data: { title: "Beta release notes", body: "shipped the beta" },
+        });
+
+        const alphaMatches = yield* database.listDocuments(siteId, collection, {
+          search: "alpha",
+        });
+        expect(alphaMatches.documents.map((document) => document.id)).toEqual([alpha.id]);
+
+        const none = yield* database.listDocuments(siteId, collection, { search: "gamma" });
+        expect(none.documents).toEqual([]);
+
+        yield* database.updateDocument(siteId, collection, alpha.id, {
+          data: { title: "Alpha release notes", body: "renamed to gamma" },
+        });
+        const afterUpdate = yield* database.listDocuments(siteId, collection, {
+          search: "gamma",
+        });
+        expect(afterUpdate.documents.map((document) => document.id)).toEqual([alpha.id]);
+        const betaOnly = yield* database.listDocuments(siteId, collection, {
+          search: "shipped",
+        });
+        expect(betaOnly.documents).toHaveLength(1);
+
+        yield* database.deleteDocument(siteId, collection, alpha.id);
+        const afterDelete = yield* database.listDocuments(siteId, collection, {
+          search: "gamma",
+        });
+        expect(afterDelete.documents).toEqual([]);
+      }),
+    ),
+  );
+
   it.effect("keeps sites isolated", () =>
     withDatabase(
       Effect.gen(function* () {

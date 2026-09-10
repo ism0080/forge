@@ -38,6 +38,7 @@ const buildListQuery = (query: {
   readonly cursor?: string | undefined;
   readonly whereField?: string | undefined;
   readonly whereValue?: string | undefined;
+  readonly search?: string | undefined;
   readonly sortBy?: "createdAt" | "updatedAt" | "id" | undefined;
   readonly sortDir?: "asc" | "desc" | undefined;
 }): DbListQuery => ({
@@ -45,6 +46,7 @@ const buildListQuery = (query: {
   ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
   ...(query.whereField !== undefined ? { whereField: query.whereField } : {}),
   ...(query.whereValue !== undefined ? { whereValue: query.whereValue } : {}),
+  ...(query.search !== undefined ? { search: query.search } : {}),
   ...(query.sortBy !== undefined ? { sortBy: query.sortBy } : {}),
   ...(query.sortDir !== undefined ? { sortDir: query.sortDir } : {}),
 });

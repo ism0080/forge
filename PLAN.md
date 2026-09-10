@@ -56,20 +56,27 @@ Database:
 
 - Per-site SQLite document collections: CRUD, list/filter, keyset pagination,
   and optimistic concurrency via `expectedVersion`.
+- Full-text search over collection documents via an FTS5 index kept in sync by
+  triggers; `search=<text>` on the list endpoint.
 - Drizzle-table row CRUD with typed SDK mapping; ordered migrations with hashes,
   ordering/immutability checks, and configurable limits.
 - Realtime create/update/delete events over websocket for collections and tables.
 
 Other:
 
+- Scheduled jobs: per-site cron jobs stored in SQLite, executed by a background
+  runner that forwards each occurrence through the webhook gateway. Exposed over
+  HTTP and the SDK, with `forge jobs list` / `forge jobs run`.
 - Base64 file upload to per-site object storage.
 - Webhook forwarding to `EXTERNAL_API_URL` with retries and timeouts.
 - Plugin registry (`/api/plugins`) — currently reports file capabilities.
-- CLI `init`, `deploy`, `db push`, `plugins list`, `dev`.
+- CLI `init`, `deploy`, `db push`, `jobs list`, `jobs run`, `plugins list`, `dev`.
 - Templates `default` and `pwa` (React 19, TanStack Query/Router, Tailwind v4,
   shadcn/ui on Base UI, vite-plugin-pwa, Drizzle), with subpath-aware Vite base
   and router basepath and preconfigured `entry`/migrations.
 - One shared contract: the SDK depends on `forge-core`, not the server package.
+- CI workflow runs lint, typecheck, and tests; `pnpm-lock.yaml` is committed for
+  reproducible installs.
 - Lockstep package versioning enforced by `scripts/versions.mjs`, wired into
   `pnpm test`.
 
@@ -100,9 +107,10 @@ API:
 
 DX:
 
-- No CI; the version/alignment check only runs where `pnpm test` runs.
 - SDK table clients support keyset pagination but no typed field filters
   (documents support `whereField`/`whereValue`).
+- Jobs are cron expressions evaluated in UTC and only forward to the webhook
+  gateway; there is no in-process handler API.
 
 Ops:
 
@@ -110,7 +118,6 @@ Ops:
   retention for stale databases or uploads.
 - `node:sqlite` is experimental; Docker builds on `node:25` while `.nvmrc` pins
   v26.
-- `pnpm-lock.yaml` is gitignored, so installs are not reproducible from the repo.
 
 ## Success criteria
 

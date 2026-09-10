@@ -1,6 +1,7 @@
 import { Layer } from "effect";
 import { DbHandler } from "./handlers/db.js";
 import { HealthHandler } from "./handlers/health.js";
+import { JobsHandler } from "./handlers/jobs.js";
 import { PluginsHandler } from "./handlers/plugins.js";
 import { SchemaHandler } from "./handlers/schema.js";
 import { SitesHandler } from "./handlers/sites.js";
@@ -12,6 +13,7 @@ export const handlers = Layer.mergeAll(
   WebhookGatewayHandler,
   DbHandler,
   SchemaHandler,
+  JobsHandler,
   SitesHandler,
   UploadHandler,
   PluginsHandler,

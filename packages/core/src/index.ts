@@ -166,6 +166,7 @@ export const DbListQuerySchema = Schema.Struct({
   cursor: Schema.optional(Schema.String),
   whereField: Schema.optional(Schema.String),
   whereValue: Schema.optional(Schema.String),
+  search: Schema.optional(Schema.String),
   sortBy: Schema.optional(DbSortBySchema),
   sortDir: Schema.optional(DbSortDirSchema),
 });
@@ -213,6 +214,61 @@ export const DbListResponseSchema = Schema.Struct({
   nextCursor: Schema.optional(Schema.String),
 });
 export type DbListResponse = Schema.Schema.Type<typeof DbListResponseSchema>;
+
+export const JobStatusSchema = Schema.Literals(["success", "error"]);
+export type JobStatus = Schema.Schema.Type<typeof JobStatusSchema>;
+
+export const JobDefinitionSchema = Schema.Struct({
+  id: DocumentId,
+  siteId: SiteId,
+  name: Schema.String,
+  schedule: Schema.String,
+  payload: Schema.optional(Schema.Json),
+  enabled: Schema.Boolean,
+  nextRunAt: Schema.String,
+  lastRunAt: Schema.optional(Schema.String),
+  lastStatus: Schema.optional(JobStatusSchema),
+  lastError: Schema.optional(Schema.String),
+  runCount: Schema.Number,
+  version: Schema.Number,
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+});
+export type JobDefinition = Schema.Schema.Type<typeof JobDefinitionSchema>;
+
+export const JobListResponseSchema = Schema.Struct({
+  jobs: Schema.Array(JobDefinitionSchema),
+});
+export type JobListResponse = Schema.Schema.Type<typeof JobListResponseSchema>;
+
+export const JobResponseSchema = Schema.Struct({
+  job: JobDefinitionSchema,
+});
+export type JobResponse = Schema.Schema.Type<typeof JobResponseSchema>;
+
+export const JobDeleteResponseSchema = Schema.Struct({
+  ok: Schema.Literal(true),
+});
+export type JobDeleteResponse = Schema.Schema.Type<typeof JobDeleteResponseSchema>;
+
+export const JobCreateRequestSchema = Schema.Struct({
+  siteId: SiteId,
+  name: Schema.NonEmptyString,
+  schedule: Schema.NonEmptyString,
+  payload: Schema.optional(Schema.Json),
+  enabled: Schema.optional(Schema.Boolean),
+});
+export type JobCreateRequest = Schema.Schema.Type<typeof JobCreateRequestSchema>;
+
+export const JobUpdateRequestSchema = Schema.Struct({
+  siteId: SiteId,
+  name: Schema.optional(Schema.NonEmptyString),
+  schedule: Schema.optional(Schema.NonEmptyString),
+  payload: Schema.optional(Schema.Json),
+  enabled: Schema.optional(Schema.Boolean),
+  expectedVersion: Schema.optional(Schema.Number),
+});
+export type JobUpdateRequest = Schema.Schema.Type<typeof JobUpdateRequestSchema>;
 
 export const WebhookSendInputSchema = Schema.Struct({
   title: Schema.NonEmptyString,

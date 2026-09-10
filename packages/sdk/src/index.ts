@@ -5,6 +5,7 @@ import type {
   DbDocument,
   DbListQuery,
   DbUpdateInput,
+  JobDefinition,
   SchemaRowChangeEvent,
   UploadInput,
   WebhookSendInput,
@@ -156,6 +157,32 @@ type DefaultDbTableInsert<Row> = Omit<Row, DbManagedRowKeys>;
 export interface ForgeMigration {
   readonly id: string;
   readonly sql: string;
+}
+
+type JobPayload = NonNullable<JobDefinition["payload"]>;
+
+export interface ForgeJobInput {
+  readonly name: string;
+  readonly schedule: string;
+  readonly payload?: JobPayload;
+  readonly enabled?: boolean;
+}
+
+export interface ForgeJobUpdateInput {
+  readonly name?: string;
+  readonly schedule?: string;
+  readonly payload?: JobPayload;
+  readonly enabled?: boolean;
+  readonly expectedVersion?: number;
+}
+
+export interface ForgeJobsClient {
+  readonly list: () => Promise<JobDefinition[]>;
+  readonly get: (id: string) => Promise<JobDefinition>;
+  readonly create: (input: ForgeJobInput) => Promise<JobDefinition>;
+  readonly update: (id: string, input: ForgeJobUpdateInput) => Promise<JobDefinition>;
+  readonly delete: (id: string, expectedVersion?: number) => Promise<{ ok: true }>;
+  readonly run: (id: string) => Promise<JobDefinition>;
 }
 
 export interface ForgeTableClient<
@@ -400,6 +427,64 @@ export const createClient = ({ baseUrl, siteId = "" }: ForgeClientOptions) => {
         ),
       table: tableClient,
     },
+    jobs: {
+      list: () =>
+        run(client["server.jobs"]["jobs.list"]({ query: { siteId: site } })).then(
+          ({ jobs }) => [...jobs],
+        ),
+      get: (id: string) =>
+        run(
+          client["server.jobs"]["jobs.get"]({
+            params: { id: DocumentId.make(id) },
+            query: { siteId: site },
+          }),
+        ).then(({ job }) => job),
+      create: (input: ForgeJobInput) =>
+        run(
+          client["server.jobs"]["jobs.create"]({
+            payload: {
+              siteId: site,
+              name: input.name,
+              schedule: input.schedule,
+              ...(input.payload !== undefined ? { payload: input.payload } : {}),
+              ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+            },
+          }),
+        ).then(({ job }) => job),
+      update: (id: string, input: ForgeJobUpdateInput) =>
+        run(
+          client["server.jobs"]["jobs.update"]({
+            params: { id: DocumentId.make(id) },
+            payload: {
+              siteId: site,
+              ...(input.name !== undefined ? { name: input.name } : {}),
+              ...(input.schedule !== undefined ? { schedule: input.schedule } : {}),
+              ...(input.payload !== undefined ? { payload: input.payload } : {}),
+              ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+              ...(input.expectedVersion !== undefined
+                ? { expectedVersion: input.expectedVersion }
+                : {}),
+            },
+          }),
+        ).then(({ job }) => job),
+      delete: (id: string, expectedVersion?: number) =>
+        run(
+          client["server.jobs"]["jobs.delete"]({
+            params: { id: DocumentId.make(id) },
+            query: {
+              siteId: site,
+              ...(expectedVersion !== undefined ? { expectedVersion } : {}),
+            },
+          }),
+        ),
+      run: (id: string) =>
+        run(
+          client["server.jobs"]["jobs.run"]({
+            params: { id: DocumentId.make(id) },
+            query: { siteId: site },
+          }),
+        ).then(({ job }) => job),
+    } satisfies ForgeJobsClient,
     upload: (input: UploadInput) =>
       run(
         client["server.upload"]["upload.create"]({

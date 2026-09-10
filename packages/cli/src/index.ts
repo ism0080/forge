@@ -331,9 +331,48 @@ const db = Command.make("db").pipe(
   Command.withSubcommands([dbPush]),
 );
 
+const jobsList = Command.make(
+  "list",
+  {},
+  Effect.fn(function* () {
+    const config = yield* readConfig();
+    const client = yield* makeClient(config);
+    const jobs = yield* Effect.tryPromise({
+      try: () => client.jobs.list(),
+      catch: cliError("Unable to list jobs"),
+    });
+    for (const job of jobs) {
+      const state = job.enabled ? "enabled" : "disabled";
+      yield* Effect.log(`${job.name} [${state}] ${job.schedule} next=${job.nextRunAt}`);
+    }
+    if (jobs.length === 0) {
+      yield* Effect.log(`No jobs for site '${config.siteId}'`);
+    }
+  }),
+).pipe(Command.withDescription("List scheduled jobs for the configured site"));
+
+const jobsRun = Command.make(
+  "run",
+  { id: Argument.string("id") },
+  Effect.fn(function* ({ id }) {
+    const config = yield* readConfig();
+    const client = yield* makeClient(config);
+    const job = yield* Effect.tryPromise({
+      try: () => client.jobs.run(id),
+      catch: cliError(`Unable to run job ${id}`),
+    });
+    yield* Effect.log(`Ran job '${job.name}' (${job.lastStatus ?? "unknown"})`);
+  }),
+).pipe(Command.withDescription("Run a scheduled job immediately"));
+
+const jobs = Command.make("jobs").pipe(
+  Command.withDescription("Scheduled job commands"),
+  Command.withSubcommands([jobsList, jobsRun]),
+);
+
 const cli = Command.make("forge").pipe(
   Command.withDescription("Forge CLI"),
-  Command.withSubcommands([init, deploy, db, plugins, dev]),
+  Command.withSubcommands([init, deploy, db, jobs, plugins, dev]),
 );
 
 Command.run(cli, { version: CLI_VERSION }).pipe(

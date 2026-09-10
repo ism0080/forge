@@ -93,6 +93,55 @@ const CREATE_CREATED_INDEX_SQL =
 const CREATE_UPDATED_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS idx_documents_updated ON documents (collection, updated_at, id)";
 
+const CREATE_META_SQL = `CREATE TABLE IF NOT EXISTS _forge_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+) STRICT`;
+
+const CREATE_DOCUMENTS_FTS_SQL = `
+  CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+    collection UNINDEXED,
+    id UNINDEXED,
+    body,
+    tokenize = 'unicode61 remove_diacritics 2'
+  )
+`;
+
+const CREATE_DOCUMENTS_FTS_TRIGGERS_SQL = `
+  CREATE TRIGGER IF NOT EXISTS documents_fts_insert AFTER INSERT ON documents BEGIN
+    INSERT INTO documents_fts (collection, id, body) VALUES (new.collection, new.id, new.data);
+  END;
+  CREATE TRIGGER IF NOT EXISTS documents_fts_delete AFTER DELETE ON documents BEGIN
+    DELETE FROM documents_fts WHERE collection = old.collection AND id = old.id;
+  END;
+  CREATE TRIGGER IF NOT EXISTS documents_fts_update AFTER UPDATE ON documents BEGIN
+    DELETE FROM documents_fts WHERE collection = old.collection AND id = old.id;
+    INSERT INTO documents_fts (collection, id, body) VALUES (new.collection, new.id, new.data);
+  END;
+`;
+
+const FTS_BACKFILLED_KEY = "fts_backfilled";
+
+const backfillDocumentsFts = (site: SiteDb): void => {
+  const marker = site.db
+    .prepare("SELECT value FROM _forge_meta WHERE key = ?")
+    .get(FTS_BACKFILLED_KEY);
+  if (marker !== undefined) {
+    return;
+  }
+  site.db.exec(`
+    INSERT INTO documents_fts (collection, id, body)
+    SELECT collection, id, data FROM documents
+    WHERE NOT EXISTS (
+      SELECT 1 FROM documents_fts f
+      WHERE f.collection = documents.collection AND f.id = documents.id
+    )
+  `);
+  site.db
+    .prepare("INSERT OR REPLACE INTO _forge_meta (key, value) VALUES (?, ?)")
+    .run(FTS_BACKFILLED_KEY, "1");
+};
+
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 const DbDocumentDataFromJson = Schema.fromJsonString(DbDocumentDataSchema);
 
@@ -134,6 +183,29 @@ const buildKeysetClause = (
   };
 };
 
+const toFtsMatch = (search: string): string | undefined => {
+  const terms = search.split(/\s+/).filter((term) => term.length > 0);
+  if (terms.length === 0) {
+    return undefined;
+  }
+  // wrap each term in a quoted phrase so user input cannot inject FTS operators
+  return terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" ");
+};
+
+const buildSearchClause = (
+  collection: CollectionId,
+  search: string,
+): { sql: string; params: Array<string> } | undefined => {
+  const match = toFtsMatch(search);
+  if (match === undefined) {
+    return undefined;
+  }
+  return {
+    sql: "AND id IN (SELECT id FROM documents_fts WHERE documents_fts MATCH ? AND collection = ?)",
+    params: [match, collection],
+  };
+};
+
 const make = Effect.gen(function* () {
   const config = yield* SqliteDatabaseConfigService;
   const fs = yield* FileSystem.FileSystem;
@@ -156,6 +228,10 @@ const make = Effect.gen(function* () {
             site.db.exec(CREATE_DOCUMENTS_SQL);
             site.db.exec(CREATE_CREATED_INDEX_SQL);
             site.db.exec(CREATE_UPDATED_INDEX_SQL);
+            site.db.exec(CREATE_META_SQL);
+            site.db.exec(CREATE_DOCUMENTS_FTS_SQL);
+            site.db.exec(CREATE_DOCUMENTS_FTS_TRIGGERS_SQL);
+            backfillDocumentsFts(site);
           },
         );
       },
@@ -461,6 +537,8 @@ const make = Effect.gen(function* () {
             : { sql: "", params: [] as Array<string | number> };
         const filter =
           whereField !== undefined ? buildFilterClause(whereField, whereValue) : undefined;
+        const search =
+          query?.search !== undefined ? buildSearchClause(collection, query.search) : undefined;
 
         const orderDirection = sortDir === "asc" ? "ASC" : "DESC";
         const sql = `
@@ -469,6 +547,7 @@ const make = Effect.gen(function* () {
           WHERE collection = ?
             ${keyset.sql}
             ${filter?.sql ?? ""}
+            ${search?.sql ?? ""}
           ORDER BY ${column} ${orderDirection}, id ${orderDirection}
           LIMIT ?
         `;
@@ -480,6 +559,7 @@ const make = Effect.gen(function* () {
               collection,
               ...keyset.params,
               ...(filter?.params ?? []),
+              ...(search?.params ?? []),
               limit + 1,
             ) as unknown as DocumentRow[],
         );

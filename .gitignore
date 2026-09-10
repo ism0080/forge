@@ -5,5 +5,4 @@ data/
 .DS_Store
 .env
 coverage/
-pnpm-lock.yaml
 tsconfig.tsbuildinfo

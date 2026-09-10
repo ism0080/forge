@@ -7,9 +7,13 @@ import { routes } from "./routes.js";
 import { AppConfigLayer, serverConfig } from "./config/server.js";
 import { WebhookConfigLayer } from "./config/webhook.js";
 import { DbEventsConsoleTapLayer, DbEventsInMemoryLayer } from "./services/db/events.js";
+import { DbClockLayer } from "./services/db/shared.js";
 import { SqliteDatabaseLayer } from "./services/db/sqlite.js";
 import { SiteConnectionsLayer } from "./services/db/sqlite-connection.js";
 import { SchemaServiceLayer } from "./services/db/schema-service.js";
+import { JobForwarderWebhookLayer } from "./services/jobs/forwarder.js";
+import { JobsServiceLayer } from "./services/jobs/service.js";
+import { JobRunnerLayer } from "./services/jobs/runner.js";
 import { LocalFileStorageLayer } from "./services/storage/local-file.js";
 import { CorsMiddleware } from "./middleware/cors.js";
 
@@ -21,6 +25,14 @@ const InfrastructureLive = Layer.mergeAll(
   NodeServices.layer,
 );
 
+const WebhookForwardingLive = JobForwarderWebhookLayer.pipe(
+  Layer.provide(Layer.mergeAll(WebhookConfigLayer, FetchHttpClient.layer, InfrastructureLive)),
+);
+
+const JobsLive = JobsServiceLayer.pipe(Layer.provide(WebhookForwardingLive));
+
+const JobRunnerLive = JobRunnerLayer.pipe(Layer.provide(Layer.merge(JobsLive, DbClockLayer)));
+
 const ApplicationServicesLive = Layer.merge(
   InfrastructureLive,
   Layer.mergeAll(
@@ -31,6 +43,9 @@ const ApplicationServicesLive = Layer.merge(
     DbEventsConsoleTapLayer,
     WebhookConfigLayer,
     FetchHttpClient.layer,
+    WebhookForwardingLive,
+    JobsLive,
+    JobRunnerLive,
   ).pipe(Layer.provide(InfrastructureLive)),
 );
 

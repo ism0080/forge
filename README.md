@@ -83,7 +83,7 @@ The server stores documents in a per-site SQLite database (`node:sqlite`, WAL mo
 
 Current endpoints:
 
-- `GET /api/db/:collection?siteId=<siteId>&limit=<n>&cursor=<cursor>&whereField=<field>&whereValue=<value>&sortBy=<createdAt|updatedAt|id>&sortDir=<asc|desc>`
+- `GET /api/db/:collection?siteId=<siteId>&limit=<n>&cursor=<cursor>&whereField=<field>&whereValue=<value>&search=<text>&sortBy=<createdAt|updatedAt|id>&sortDir=<asc|desc>`
 - `GET /api/db/:collection/:id?siteId=<siteId>`
 - `POST /api/db/:collection` with `{ "siteId": "...", "data": { ... }, "id": "optional" }`
 - `PUT /api/db/:collection/:id` with `{ "siteId": "...", "data": { ... }, "expectedVersion": 1 }` (optional optimistic concurrency)
@@ -96,6 +96,7 @@ Notes:
 
 - Documents include `version` (starting at `1` and incrementing on each update).
 - If `expectedVersion` does not match, the API returns `409 version conflict`.
+- `search` runs an FTS5 full-text query over the document JSON for the collection.
 - The DB adapter emits create/update/delete change events through a pluggable events service (`packages/server/src/db/events.ts`).
 - Current default wiring uses an in-memory pub/sub bus (`DbEventsInMemoryLayer`) plus a console tap (`DbEventsConsoleTapLayer`), ready for websocket fanout wiring.
 - Migration history stores server-computed SHA-256 hashes, timestamps, durations, and deployment IDs. Limits are configured with `DB_MIGRATION_MAX_COUNT`, `DB_MIGRATION_MAX_BYTES`, `DB_MIGRATION_MAX_BUNDLE_BYTES`, and `DB_MIGRATION_TIMEOUT_MS`.
@@ -119,6 +120,7 @@ const page1 = await posts.list({
   sortBy: "createdAt",
   sortDir: "desc",
 });
+const matches = await posts.list({ search: "hello world" });
 const first = page1.documents[0];
 if (first) {
   await posts.update(first.id, {
@@ -169,6 +171,47 @@ const result = await client.webhook({
   payload: { postId: "123" },
 });
 ```
+
+## Scheduled jobs
+
+Per-site cron jobs are stored in SQLite and executed by a background runner. Each
+occurrence is forwarded through the webhook gateway (so it uses the same
+`EXTERNAL_API_URL` / `EXTERNAL_API_KEY` configuration). Schedules are 5-field cron
+expressions (`minute hour day month weekday`) evaluated in UTC.
+
+Endpoints:
+
+- `GET /api/jobs?siteId=<siteId>`
+- `GET /api/jobs/:id?siteId=<siteId>`
+- `POST /api/jobs` with `{ "siteId": "...", "name": "...", "schedule": "0 3 * * *", "payload": optional, "enabled": optional }`
+- `PUT /api/jobs/:id` with `{ "siteId": "...", "schedule": "...", "enabled": false, "expectedVersion": 1 }`
+- `DELETE /api/jobs/:id?siteId=<siteId>&expectedVersion=<n>`
+- `POST /api/jobs/:id/run?siteId=<siteId>` runs a job immediately
+
+SDK usage:
+
+```ts
+const job = await client.jobs.create({
+  name: "nightly-cleanup",
+  schedule: "0 3 * * *",
+  payload: { kind: "cleanup" },
+});
+
+await client.jobs.list();
+await client.jobs.update(job.id, { enabled: false, expectedVersion: job.version });
+await client.jobs.run(job.id);
+await client.jobs.delete(job.id, job.version + 1);
+```
+
+CLI:
+
+```bash
+forge jobs list
+forge jobs run <job-id>
+```
+
+The runner is controlled by `JOB_RUNNER_ENABLED` (default `true`) and
+`JOB_RUNNER_INTERVAL_MS` (default `30000`).
 
 ## Health
 

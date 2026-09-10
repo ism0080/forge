@@ -1,6 +1,7 @@
 import { HttpApi, OpenApi } from "effect/unstable/httpapi";
 import { DbGroup } from "./groups/db.js";
 import { HealthGroup } from "./groups/health.js";
+import { JobsGroup } from "./groups/jobs.js";
 import { PluginsGroup } from "./groups/plugins.js";
 import { SchemaGroup } from "./groups/schema.js";
 import { SitesGroup } from "./groups/sites.js";
@@ -12,6 +13,7 @@ export const Api = HttpApi.make("server")
   .add(WebhookGatewayGroup)
   .add(DbGroup)
   .add(SchemaGroup)
+  .add(JobsGroup)
   .add(SitesGroup)
   .add(UploadGroup)
   .add(PluginsGroup)
