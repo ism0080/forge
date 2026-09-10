@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
-    "dev:api": "pnpm --filter @ism0080/forge-server dev",
+    "dev:api": "varlock run -- pnpm --filter @ism0080/forge-server dev",
     "dev:cli": "pnpm --filter @ism0080/forge-cli dev",
-    "docker": "docker compose up -d",
-    "docker:new": "docker compose up --force-recreate --build -d",
+    "docker": "varlock run -- docker compose up -d",
+    "docker:new": "varlock run -- docker compose up --force-recreate --build -d",
+    "env:check": "varlock load",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tests.json",
     "test": "node scripts/versions.mjs check && vitest run",
     "test:watch": "vitest",
@@ -31,6 +32,7 @@
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.9.3",
     "typescript": "^5.8.3",
+    "varlock": "^1.18.0",
     "vitest": "^4.1.10"
   },
   "packageManager": "pnpm@10.12.1"
