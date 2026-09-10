@@ -68,13 +68,12 @@ export const UploadInputSchema = Schema.Struct({
 });
 export type UploadInput = Schema.Schema.Type<typeof UploadInputSchema>;
 
-export const UploadRequestSchema = Schema.Struct({
+export const UploadQuerySchema = Schema.Struct({
   siteId: SiteId,
   path: Schema.String,
-  contentBase64: Schema.String,
   contentType: Schema.optional(Schema.String),
 });
-export type UploadRequest = Schema.Schema.Type<typeof UploadRequestSchema>;
+export type UploadQuery = Schema.Schema.Type<typeof UploadQuerySchema>;
 
 export const UploadResponseSchema = Schema.Struct({
   ok: Schema.Literal(true),
@@ -299,6 +298,7 @@ export class DocumentNotFoundError extends Schema.TaggedErrorClass<DocumentNotFo
     collection: CollectionId,
     id: DocumentId,
   },
+  { httpApiStatus: 404 },
 ) {}
 
 export class VersionConflictError extends Schema.TaggedErrorClass<VersionConflictError>()(
@@ -308,6 +308,7 @@ export class VersionConflictError extends Schema.TaggedErrorClass<VersionConflic
     expectedVersion: Schema.Number,
     actualVersion: Schema.Number,
   },
+  { httpApiStatus: 409 },
 ) {}
 
 export class StorageError extends Schema.TaggedErrorClass<StorageError>()("StorageError", {
@@ -317,12 +318,85 @@ export class StorageError extends Schema.TaggedErrorClass<StorageError>()("Stora
   cause: Schema.Defect(),
 }) {}
 
+export class StorageNotFoundError extends Schema.TaggedErrorClass<StorageNotFoundError>()(
+  "StorageNotFoundError",
+  {
+    bucket: Schema.String,
+    key: Schema.String,
+  },
+) {}
+
 export class DbOperationError extends Schema.TaggedErrorClass<DbOperationError>()(
   "DbOperationError",
   {
     operation: Schema.String,
     cause: Schema.Defect(),
   },
+) {}
+
+export class InternalError extends Schema.TaggedErrorClass<InternalError>()(
+  "InternalError",
+  { message: Schema.String },
+  { httpApiStatus: 500 },
+) {}
+
+export class JobNotFoundError extends Schema.TaggedErrorClass<JobNotFoundError>()(
+  "JobNotFoundError",
+  { siteId: SiteId, id: DocumentId },
+  { httpApiStatus: 404 },
+) {}
+
+export class JobConflictError extends Schema.TaggedErrorClass<JobConflictError>()(
+  "JobConflictError",
+  { id: DocumentId, expectedVersion: Schema.Number, actualVersion: Schema.Number },
+  { httpApiStatus: 409 },
+) {}
+
+export class JobInvalidInputError extends Schema.TaggedErrorClass<JobInvalidInputError>()(
+  "JobInvalidInputError",
+  { message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
+export class SchemaRowNotFoundError extends Schema.TaggedErrorClass<SchemaRowNotFoundError>()(
+  "SchemaRowNotFoundError",
+  { siteId: SiteId, table: Schema.String, id: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+export class SchemaRowConflictError extends Schema.TaggedErrorClass<SchemaRowConflictError>()(
+  "SchemaRowConflictError",
+  {
+    table: Schema.String,
+    id: Schema.String,
+    expectedVersion: Schema.Number,
+    actualVersion: Schema.Number,
+  },
+  { httpApiStatus: 409 },
+) {}
+
+export class SchemaMigrationError extends Schema.TaggedErrorClass<SchemaMigrationError>()(
+  "SchemaMigrationError",
+  { message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
+export class SchemaInvalidInputError extends Schema.TaggedErrorClass<SchemaInvalidInputError>()(
+  "SchemaInvalidInputError",
+  { message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
+export class SiteNotFoundError extends Schema.TaggedErrorClass<SiteNotFoundError>()(
+  "SiteNotFoundError",
+  {},
+  { httpApiStatus: 404 },
+) {}
+
+export class UploadTooLargeError extends Schema.TaggedErrorClass<UploadTooLargeError>()(
+  "UploadTooLargeError",
+  { maxBytes: Schema.Number, actualBytes: Schema.Number },
+  { httpApiStatus: 413 },
 ) {}
 
 export const DbError = Schema.Union([

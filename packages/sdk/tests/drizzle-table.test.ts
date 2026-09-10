@@ -125,7 +125,15 @@ describe("createClient", () => {
 
   it("rejects with a ForgeApiError carrying the server error code", async () => {
     fetchMock.mockImplementation(async () =>
-      Response.json({ error: "document not found" }, { status: 404 }),
+      Response.json(
+        {
+          _tag: "DocumentNotFoundError",
+          siteId: "demo",
+          collection: "posts",
+          id: "missing",
+        },
+        { status: 404 },
+      ),
     );
 
     const client = createClient({ baseUrl: "https://forge.test", siteId: "demo" });
@@ -138,7 +146,15 @@ describe("createClient", () => {
 
   it("surfaces version conflicts as ForgeApiError", async () => {
     fetchMock.mockImplementation(async () =>
-      Response.json({ error: "version conflict" }, { status: 409 }),
+      Response.json(
+        {
+          _tag: "VersionConflictError",
+          id: "post-1",
+          expectedVersion: 1,
+          actualVersion: 2,
+        },
+        { status: 409 },
+      ),
     );
 
     const client = createClient({ baseUrl: "https://forge.test", siteId: "demo" });
@@ -149,5 +165,33 @@ describe("createClient", () => {
 
     expect(error).toBeInstanceOf(ForgeApiError);
     expect((error as ForgeApiError).code).toBe("version conflict");
+  });
+});
+
+describe("upload", () => {
+  it("sends raw bytes with metadata in the query string", async () => {
+    const capturedBody: number[] = [];
+    fetchMock.mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = _input instanceof Request ? _input : new Request(_input, init);
+      const url = new URL(request.url);
+      expect(request.method).toBe("POST");
+      expect(url.pathname).toBe("/api/upload");
+      expect(url.searchParams.get("siteId")).toBe("demo");
+      expect(url.searchParams.get("path")).toBe("assets/logo.svg");
+      expect(url.searchParams.get("contentType")).toBe("image/svg+xml");
+      expect(request.headers.get("content-type")).toBe("application/octet-stream");
+      capturedBody.push(...new Uint8Array(await request.arrayBuffer()));
+      return Response.json({ ok: true, key: "sites/demo/assets/logo.svg" }, { status: 201 });
+    });
+
+    const client = createClient({ baseUrl: "https://forge.test", siteId: "demo" });
+    const result = await client.upload({
+      path: "assets/logo.svg",
+      contentBase64: btoa("hello"),
+      contentType: "image/svg+xml",
+    });
+
+    expect(result).toEqual({ ok: true, key: "sites/demo/assets/logo.svg" });
+    expect(capturedBody).toEqual([104, 101, 108, 108, 111]);
   });
 });

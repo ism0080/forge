@@ -1,35 +1,9 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "@ism0080/forge-core/api";
-import {
-  SchemaInvalidInputError,
-  SchemaMigrationError,
-  SchemaRowConflictError,
-  SchemaRowNotFoundError,
-  SchemaService,
-} from "../services/db/schema-service.js";
-
-const isExpected = (error: unknown): boolean =>
-  error instanceof SchemaRowNotFoundError ||
-  error instanceof SchemaRowConflictError ||
-  error instanceof SchemaMigrationError ||
-  error instanceof SchemaInvalidInputError;
-
-const mapSchemaError = (error: unknown): { error: string } => {
-  if (error instanceof SchemaRowNotFoundError) {
-    return { error: "row not found" };
-  }
-  if (error instanceof SchemaRowConflictError) {
-    return { error: "version conflict" };
-  }
-  if (error instanceof SchemaMigrationError || error instanceof SchemaInvalidInputError) {
-    return { error: error.message };
-  }
-  return { error: "internal error" };
-};
-
-const tapUnexpected = (error: unknown): Effect.Effect<void> =>
-  isExpected(error) ? Effect.void : Effect.logError("Unexpected schema error", error);
+import { SchemaRowNotFoundError } from "@ism0080/forge-core";
+import { SchemaService } from "../services/db/schema-service.js";
+import { toInternalError } from "./errors.js";
 
 export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handlers) =>
   handlers
@@ -39,8 +13,7 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
         return yield* schema
           .applyMigrations(payload.siteId, payload.migrations, payload.deploymentId)
           .pipe(
-            Effect.tapError(tapUnexpected),
-            Effect.mapError(mapSchemaError),
+            Effect.catchTag("DbOperationError", toInternalError("schema")),
             Effect.map((result) => ({ ok: true as const, applied: [...result.applied] })),
           );
       }),
@@ -55,8 +28,7 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
             ...(query.sortDir !== undefined ? { sortDir: query.sortDir } : {}),
           })
           .pipe(
-            Effect.tapError(tapUnexpected),
-            Effect.mapError(mapSchemaError),
+            Effect.catchTag("DbOperationError", toInternalError("schema")),
             Effect.map(({ rows, nextCursor }) =>
               nextCursor !== undefined ? { rows: [...rows], nextCursor } : { rows: [...rows] },
             ),
@@ -67,11 +39,16 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
       Effect.gen(function* () {
         const schema = yield* SchemaService;
         return yield* schema.getRow(query.siteId, params.table, params.id).pipe(
-          Effect.tapError(tapUnexpected),
-          Effect.mapError(mapSchemaError),
+          Effect.catchTag("DbOperationError", toInternalError("schema")),
           Effect.flatMap((row) =>
             row === undefined
-              ? Effect.fail({ error: "row not found" as const })
+              ? Effect.fail(
+                  new SchemaRowNotFoundError({
+                    siteId: query.siteId,
+                    table: params.table,
+                    id: params.id,
+                  }),
+                )
               : Effect.succeed({ row }),
           ),
         );
@@ -81,8 +58,7 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
       Effect.gen(function* () {
         const schema = yield* SchemaService;
         return yield* schema.insertRow(payload.siteId, params.table, payload.data).pipe(
-          Effect.tapError(tapUnexpected),
-          Effect.mapError(mapSchemaError),
+          Effect.catchTag("DbOperationError", toInternalError("schema")),
           Effect.map((row) => ({ row })),
         );
       }),
@@ -98,8 +74,7 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
               : {}),
           })
           .pipe(
-            Effect.tapError(tapUnexpected),
-            Effect.mapError(mapSchemaError),
+            Effect.catchTag("DbOperationError", toInternalError("schema")),
             Effect.map((row) => ({ row })),
           );
       }),
@@ -112,8 +87,7 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
           input.expectedVersion = query.expectedVersion;
         }
         return yield* schema.deleteRow(query.siteId, params.table, params.id, input).pipe(
-          Effect.tapError(tapUnexpected),
-          Effect.mapError(mapSchemaError),
+          Effect.catchTag("DbOperationError", toInternalError("schema")),
           Effect.map(() => ({ ok: true as const })),
         );
       }),

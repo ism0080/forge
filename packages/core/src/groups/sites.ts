@@ -1,13 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
-
-const SiteInternalError = Schema.Struct({
-  error: Schema.String,
-}).pipe(HttpApiSchema.status("InternalServerError"));
-
-const SiteNotFoundError = Schema.Struct({
-  error: Schema.Literal("not found"),
-}).pipe(HttpApiSchema.status("NotFound"));
+import { InternalError, SiteNotFoundError } from "../index.js";
 
 const SiteDeletedResponse = Schema.Struct({
   ok: Schema.Literal(true),
@@ -24,15 +17,15 @@ const SiteId = Schema.String.pipe(
 export const SitesGroup = HttpApiGroup.make("server.sites").add(
   HttpApiEndpoint.get("sites.list", "/directory", {
     success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/html" })),
-    error: SiteInternalError,
+    error: InternalError,
   }),
   HttpApiEndpoint.get("sites.get", "/sites/*", {
     success: Schema.Uint8Array,
-    error: SiteNotFoundError,
+    error: [SiteNotFoundError, InternalError],
   }),
   HttpApiEndpoint.delete("sites.delete", "/directory/:siteId", {
     success: SiteDeletedResponse,
-    error: [SiteNotFoundError, SiteInternalError],
+    error: [SiteNotFoundError, InternalError],
     params: Schema.Struct({ siteId: SiteId }),
   }),
 );

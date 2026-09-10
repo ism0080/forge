@@ -1,4 +1,4 @@
-import { StorageError } from "@ism0080/forge-core";
+import { StorageError, StorageNotFoundError } from "@ism0080/forge-core";
 import { Context, Effect } from "effect";
 
 export interface StorageApi {
@@ -8,15 +8,15 @@ export interface StorageApi {
     body: Uint8Array,
     contentType?: string,
   ) => Effect.Effect<void, StorageError>;
-  readonly getObject: (bucket: string, key: string) => Effect.Effect<Uint8Array, StorageError>;
+  readonly getObject: (
+    bucket: string,
+    key: string,
+  ) => Effect.Effect<Uint8Array, StorageError | StorageNotFoundError>;
   readonly listKeys: (
     bucket: string,
     prefix: string,
   ) => Effect.Effect<ReadonlyArray<string>, StorageError>;
-  readonly deletePrefix: (
-    bucket: string,
-    prefix: string,
-  ) => Effect.Effect<void, StorageError>;
+  readonly deletePrefix: (bucket: string, prefix: string) => Effect.Effect<void, StorageError>;
 }
 
 export class StorageService extends Context.Service<StorageService, StorageApi>()(

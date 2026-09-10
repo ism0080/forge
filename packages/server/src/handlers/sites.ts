@@ -1,22 +1,15 @@
-import { Effect, Schema } from "effect";
+import { Cache, Effect, Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "@ism0080/forge-core/api";
+import { InternalError, SiteNotFoundError } from "@ism0080/forge-core";
 import { AppConfigService } from "../config/server.js";
 import { StorageService } from "../services/storage/service.js";
-
-class SiteAssetNotFoundError extends Schema.TaggedErrorClass<SiteAssetNotFoundError>()(
-  "SiteAssetNotFoundError",
-  {},
-) {}
+import { toInternalError } from "./errors.js";
 
 const SiteConfigFromJson = Schema.fromJsonString(
   Schema.Struct({ spa: Schema.optional(Schema.Boolean) }),
 );
-
-const toInternalError = (error: unknown): { readonly error: string } => ({
-  error: error instanceof Error ? error.message : String(error),
-});
 
 const buildDirectoryHtml = (keys: ReadonlyArray<string>): string => {
   const siteIds = Array.from(
@@ -109,118 +102,119 @@ const contentTypeFromKey = (resolvedKey: string): string => {
 };
 
 export const SitesHandler = HttpApiBuilder.group(Api, "server.sites", (handlers) =>
-  handlers
-    .handle("sites.list", () =>
-      Effect.gen(function* () {
-        const { siteBucket } = yield* AppConfigService;
-        const storage = yield* StorageService;
+  Effect.gen(function* () {
+    const { siteBucket } = yield* AppConfigService;
+    const storage = yield* StorageService;
 
-        const keys = yield* storage
+    // `forge.json` is read on every asset request; cache the decoded `spa` flag
+    // briefly so hot paths do not hit storage on each request.
+    const spaCache = yield* Cache.make({
+      capacity: 256,
+      timeToLive: "30 seconds",
+      lookup: (siteId: string) =>
+        Effect.gen(function* () {
+          const data = yield* storage.getObject(siteBucket, `sites/${siteId}/forge.json`);
+          const config = yield* Schema.decodeUnknownEffect(SiteConfigFromJson)(
+            new TextDecoder().decode(data),
+          );
+          return config.spa === true;
+        }).pipe(Effect.orElseSucceed(() => false)),
+    });
+
+    return handlers
+      .handle("sites.list", () =>
+        storage
           .listKeys(siteBucket, "sites/")
-          .pipe(Effect.mapError(toInternalError));
-
-        return yield* Effect.succeed(buildDirectoryHtml(keys));
-      }),
-    )
-    .handle("sites.get", ({ request }) =>
-      Effect.gen(function* () {
-        const { siteBucket } = yield* AppConfigService;
-        const storage = yield* StorageService;
-
-        const key = request.url.startsWith("/") ? request.url.slice(1) : request.url;
-
-        const extractSiteId = (value: string): string | undefined => {
-          const match = /^sites\/([^/]+)\//.exec(value);
-          return match && match[1] ? match[1] : undefined;
-        };
-
-        const hostFallbackKey = (() => {
-          const match = /^sites\/(.+)\.localhost\/(.+)$/.exec(key);
-          if (!match || !match[1] || !match[2]) {
-            return undefined;
-          }
-          return `sites/${match[1]}/${match[2]}`;
-        })();
-
-        const pathWithoutQuery = key.split("?")[0] ?? key;
-        const lastSegment = pathWithoutQuery.split("/").pop() ?? "";
-        const isAssetPath = lastSegment.includes(".");
-
-        const baseKeys = hostFallbackKey ? [key, hostFallbackKey] : [key];
-        const siteIds = Array.from(
-          new Set(
-            baseKeys.flatMap((candidate) => {
-              const siteId = extractSiteId(candidate);
-              return siteId ? [siteId] : [];
-            }),
+          .pipe(
+            Effect.map(buildDirectoryHtml),
+            Effect.catchTag("StorageError", toInternalError("sites")),
           ),
-        );
+      )
+      .handle("sites.get", ({ request }) =>
+        Effect.gen(function* () {
+          const key = request.url.startsWith("/") ? request.url.slice(1) : request.url;
 
-        const primarySiteId = siteIds[0];
+          const extractSiteId = (value: string): string | undefined => {
+            const match = /^sites\/([^/]+)\//.exec(value);
+            return match && match[1] ? match[1] : undefined;
+          };
 
-        const isSpaSite = primarySiteId
-          ? yield* Effect.matchEffect(
-              storage.getObject(siteBucket, `sites/${primarySiteId}/forge.json`),
-              {
-                onSuccess: (data) =>
-                  Schema.decodeUnknownEffect(SiteConfigFromJson)(
-                    new TextDecoder().decode(data),
-                  ).pipe(
-                    Effect.map((config) => config.spa === true),
-                    Effect.orElseSucceed(() => false),
-                  ),
-                onFailure: () => Effect.succeed(false),
-              },
-            )
-          : false;
+          const hostFallbackKey = (() => {
+            const match = /^sites\/(.+)\.localhost\/(.+)$/.exec(key);
+            if (!match || !match[1] || !match[2]) {
+              return undefined;
+            }
+            return `sites/${match[1]}/${match[2]}`;
+          })();
 
-        const indexKeys =
-          !isAssetPath && isSpaSite ? siteIds.map((siteId) => `sites/${siteId}/index.html`) : [];
-        const keysToTry = Array.from(new Set([...baseKeys, ...indexKeys]));
+          const pathWithoutQuery = key.split("?")[0] ?? key;
+          const lastSegment = pathWithoutQuery.split("/").pop() ?? "";
+          const isAssetPath = lastSegment.includes(".");
 
-        const readFirst = (
-          candidates: ReadonlyArray<string>,
-        ): Effect.Effect<{ key: string; bytes: Uint8Array }, SiteAssetNotFoundError> => {
-          const [head, ...tail] = candidates;
-          if (!head) {
-            return Effect.fail(new SiteAssetNotFoundError({}));
-          }
-          return Effect.matchEffect(storage.getObject(siteBucket, head), {
-            onSuccess: (bytes) => Effect.succeed({ key: head, bytes }),
-            onFailure: () => readFirst(tail),
-          });
-        };
-
-        return yield* Effect.matchEffect(readFirst(keysToTry), {
-          onSuccess: ({ key: resolvedKey, bytes }) =>
-            Effect.succeed(
-              HttpServerResponse.uint8Array(bytes, {
-                contentType: contentTypeFromKey(resolvedKey),
+          const baseKeys = hostFallbackKey ? [key, hostFallbackKey] : [key];
+          const siteIds = Array.from(
+            new Set(
+              baseKeys.flatMap((candidate) => {
+                const siteId = extractSiteId(candidate);
+                return siteId ? [siteId] : [];
               }),
             ),
-          onFailure: () => Effect.fail({ error: "not found" as const }),
-        });
-      }),
-    )
-    .handle("sites.delete", ({ params }) =>
-      Effect.gen(function* () {
-        const { siteBucket } = yield* AppConfigService;
-        const storage = yield* StorageService;
+          );
 
-        const keys = yield* storage
-          .listKeys(siteBucket, `sites/${params.siteId}/`)
-          .pipe(Effect.mapError(toInternalError));
+          const primarySiteId = siteIds[0];
 
-        if (keys.length === 0) {
-          return yield* Effect.fail({ error: "not found" as const });
-        }
+          const isSpaSite =
+            !isAssetPath && primarySiteId !== undefined
+              ? yield* Cache.get(spaCache, primarySiteId)
+              : false;
 
-        return yield* storage
-          .deletePrefix(siteBucket, `sites/${params.siteId}`)
-          .pipe(
-            Effect.mapError(toInternalError),
+          const indexKeys =
+            !isAssetPath && isSpaSite ? siteIds.map((siteId) => `sites/${siteId}/index.html`) : [];
+          const keysToTry = Array.from(new Set([...baseKeys, ...indexKeys]));
+
+          const readFirst = (
+            candidates: ReadonlyArray<string>,
+          ): Effect.Effect<
+            { key: string; bytes: Uint8Array },
+            SiteNotFoundError | InternalError
+          > => {
+            const [head, ...tail] = candidates;
+            if (!head) {
+              return Effect.fail(new SiteNotFoundError({}));
+            }
+            return storage.getObject(siteBucket, head).pipe(
+              Effect.map((bytes) => ({ key: head, bytes })),
+              Effect.catchTags({
+                StorageNotFoundError: () => readFirst(tail),
+                StorageError: toInternalError("sites"),
+              }),
+            );
+          };
+
+          const { key: resolvedKey, bytes } = yield* readFirst(keysToTry);
+
+          return HttpServerResponse.uint8Array(bytes, {
+            contentType: contentTypeFromKey(resolvedKey),
+          });
+        }),
+      )
+      .handle("sites.delete", ({ params }) =>
+        Effect.gen(function* () {
+          const keys = yield* storage
+            .listKeys(siteBucket, `sites/${params.siteId}/`)
+            .pipe(Effect.catchTag("StorageError", toInternalError("sites")));
+
+          if (keys.length === 0) {
+            return yield* new SiteNotFoundError({});
+          }
+
+          yield* Cache.invalidate(spaCache, params.siteId);
+
+          return yield* storage.deletePrefix(siteBucket, `sites/${params.siteId}`).pipe(
+            Effect.catchTag("StorageError", toInternalError("sites")),
             Effect.map(() => ({ ok: true as const })),
           );
-      }),
-    ),
+        }),
+      );
+  }),
 );

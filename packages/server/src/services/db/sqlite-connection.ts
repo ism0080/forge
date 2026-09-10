@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import type { StatementSync } from "node:sqlite";
-import { Cause, Context, Effect, Exit, Layer } from "effect";
+import { Cause, Config, Context, Duration, Effect, Exit, Layer, RcMap, Scope } from "effect";
+import { DbOperationError } from "@ism0080/forge-core";
 
 export interface SiteDb {
   readonly db: DatabaseSync;
@@ -40,54 +41,53 @@ export const runInTransaction = <A>(site: SiteDb, f: () => A): A => {
 };
 
 export interface SiteConnections {
-  readonly open: (key: string, file: string, init?: (site: SiteDb) => void) => SiteDb;
-  readonly closeAll: () => void;
+  readonly open: (
+    file: string,
+    init?: (site: SiteDb) => void,
+  ) => Effect.Effect<SiteDb, DbOperationError, Scope.Scope>;
 }
-
-export const makeSiteConnections = (): SiteConnections => {
-  const sites = new Map<string, SiteDb>();
-  return {
-    open: (key, file, init) => {
-      const existing = sites.get(key);
-      if (existing !== undefined) {
-        // inits are idempotent DDL (CREATE ... IF NOT EXISTS); running them on
-        // every open guarantees each consumer's tables exist on the shared
-        // connection regardless of which layer opened it first
-        init?.(existing);
-        return existing;
-      }
-      const site = openConnection(file);
-      if (init !== undefined) {
-        Exit.match(Effect.runSyncExit(Effect.sync(() => init(site))), {
-          onSuccess: () => undefined,
-          onFailure: (cause) => {
-            site.db.close();
-            throw Cause.squash(cause);
-          },
-        });
-      }
-      sites.set(key, site);
-      return site;
-    },
-    closeAll: () => {
-      for (const site of sites.values()) {
-        site.db.close();
-      }
-      sites.clear();
-    },
-  };
-};
 
 export class SiteConnectionsService extends Context.Service<
   SiteConnectionsService,
   SiteConnections
 >()("forge/SiteConnectionsService") {}
 
+const DEFAULT_IDLE_TTL_MS = 300_000;
+
 export const SiteConnectionsLayer = Layer.effect(
   SiteConnectionsService,
   Effect.gen(function* () {
-    const connections = makeSiteConnections();
-    yield* Effect.addFinalizer(() => Effect.sync(() => connections.closeAll()));
-    return connections;
+    const idleTimeToLiveMs = yield* Config.number("SITE_DB_IDLE_TTL_MS").pipe(
+      Config.withDefault(DEFAULT_IDLE_TTL_MS),
+    );
+
+    const sites = yield* RcMap.make({
+      lookup: (file: string) =>
+        Effect.acquireRelease(
+          Effect.try({
+            try: () => openConnection(file),
+            catch: (cause) => new DbOperationError({ operation: "openDatabase", cause }),
+          }),
+          (site) => Effect.sync(() => site.db.close()),
+        ),
+      idleTimeToLive: Duration.millis(Math.max(0, idleTimeToLiveMs)),
+    });
+
+    const open: SiteConnections["open"] = (file, init) =>
+      Effect.gen(function* () {
+        const site = yield* RcMap.get(sites, file);
+        if (init !== undefined) {
+          // inits are idempotent DDL (CREATE ... IF NOT EXISTS) and run on every
+          // open so each consumer's tables exist on the shared connection
+          // regardless of which layer opened it first
+          yield* Effect.try({
+            try: () => init(site),
+            catch: (cause) => new DbOperationError({ operation: "initDatabase", cause }),
+          });
+        }
+        return site;
+      });
+
+    return { open } satisfies SiteConnections;
   }),
 );

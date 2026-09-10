@@ -2,10 +2,10 @@ import "varlock/auto-load";
 import { createServer } from "node:http";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Layer } from "effect";
-import { FetchHttpClient, HttpRouter } from "effect/unstable/http";
+import { Config, Effect, FileSystem, Layer } from "effect";
+import { FetchHttpClient, HttpIncomingMessage, HttpRouter } from "effect/unstable/http";
 import { routes } from "./routes.js";
-import { AppConfigLayer, serverConfig } from "./config/server.js";
+import { AppConfigLayer, DEFAULT_UPLOAD_MAX_BYTES, serverConfig } from "./config/server.js";
 import { WebhookConfigLayer } from "./config/webhook.js";
 import { DbEventsConsoleTapLayer, DbEventsInMemoryLayer } from "./services/db/events.js";
 import { DbClockLayer } from "./services/db/shared.js";
@@ -19,6 +19,14 @@ import { LocalFileStorageLayer } from "./services/storage/local-file.js";
 import { CorsMiddleware } from "./middleware/cors.js";
 
 const ServerLive = NodeHttpServer.layerConfig(() => createServer(), serverConfig);
+
+const RequestBodyLimitLive = Layer.effect(
+  HttpIncomingMessage.MaxBodySize,
+  Config.number("UPLOAD_MAX_BYTES").pipe(
+    Config.withDefault(DEFAULT_UPLOAD_MAX_BYTES),
+    Effect.map((bytes) => FileSystem.Size(bytes)),
+  ),
+);
 
 const InfrastructureLive = Layer.mergeAll(
   SiteConnectionsLayer,
@@ -38,6 +46,7 @@ const ApplicationServicesLive = Layer.merge(
   InfrastructureLive,
   Layer.mergeAll(
     AppConfigLayer,
+    RequestBodyLimitLive,
     LocalFileStorageLayer,
     SqliteDatabaseLayer,
     SchemaServiceLayer,

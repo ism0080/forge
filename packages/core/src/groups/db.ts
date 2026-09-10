@@ -10,28 +10,15 @@ import {
   DbUpdateRequestSchema,
   DbUpdateResponseSchema,
   DocumentId,
+  DocumentNotFoundError,
+  InternalError,
   SiteId,
+  VersionConflictError,
 } from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-const DbNotFoundError = Schema.Struct({
-  error: Schema.Literal("document not found"),
-}).pipe(HttpApiSchema.status("NotFound"));
-
-const DbConflictError = Schema.Struct({
-  error: Schema.Literal("version conflict"),
-}).pipe(HttpApiSchema.status("Conflict"));
-
-const DbBadRequestError = Schema.Struct({
-  error: Schema.String,
-}).pipe(HttpApiSchema.status("BadRequest"));
-
-const DbInternalError = Schema.Struct({
-  error: Schema.Literal("internal error"),
-}).pipe(HttpApiSchema.status("InternalServerError"));
-
-const DbErrors = [DbNotFoundError, DbConflictError, DbInternalError, DbBadRequestError];
+const DbErrors = [DocumentNotFoundError, VersionConflictError, InternalError];
 
 export const DbGroup = HttpApiGroup.make("server.db").add(
   HttpApiEndpoint.get("db.events.get", "/api/db/events", {

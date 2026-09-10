@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Layer, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { DbOperationError, DocumentId, SiteId } from "@ism0080/forge-core";
+import {
+  DbOperationError,
+  DocumentId,
+  SchemaInvalidInputError,
+  SchemaMigrationError,
+  SchemaRowConflictError,
+  SchemaRowNotFoundError,
+  SiteId,
+} from "@ism0080/forge-core";
 import { DbClockLayer, DbClockService, parseLimit, randomId, siteStorageKey } from "./shared.js";
 import { prepareStatement, runInTransaction, SiteConnectionsService } from "./sqlite-connection.js";
 import type { SiteDb } from "./sqlite-connection.js";
@@ -48,34 +56,12 @@ export interface SchemaMigrationResult {
   readonly applied: ReadonlyArray<string>;
 }
 
-export class SchemaMigrationError extends Schema.TaggedErrorClass<SchemaMigrationError>()(
-  "SchemaMigrationError",
-  { message: Schema.String },
-) {}
-
-export class SchemaInvalidInputError extends Schema.TaggedErrorClass<SchemaInvalidInputError>()(
-  "SchemaInvalidInputError",
-  { message: Schema.String },
-) {}
-
-export class SchemaRowNotFoundError extends Schema.TaggedErrorClass<SchemaRowNotFoundError>()(
-  "SchemaRowNotFoundError",
-  {
-    siteId: SiteId,
-    table: Schema.String,
-    id: Schema.String,
-  },
-) {}
-
-export class SchemaRowConflictError extends Schema.TaggedErrorClass<SchemaRowConflictError>()(
-  "SchemaRowConflictError",
-  {
-    table: Schema.String,
-    id: Schema.String,
-    expectedVersion: Schema.Number,
-    actualVersion: Schema.Number,
-  },
-) {}
+export {
+  SchemaInvalidInputError,
+  SchemaMigrationError,
+  SchemaRowConflictError,
+  SchemaRowNotFoundError,
+};
 
 export type SchemaRowError =
   | SchemaInvalidInputError
@@ -249,18 +235,14 @@ const make = Effect.gen(function* () {
 
   yield* fs.makeDirectory(config.storageRoot, { recursive: true });
 
-  const openSite = (siteId: SiteId): Effect.Effect<SiteDb, DbOperationError> =>
-    Effect.try({
-      try: () => {
-        const storageKey = siteStorageKey(siteId);
-        return connections.open(
-          storageKey,
-          path.join(config.storageRoot, `${storageKey}.sqlite`),
-          (site) => site.db.exec(MIGRATIONS_TABLE_SQL),
-        );
-      },
-      catch: (cause) => new DbOperationError({ operation: "openSchemaDatabase", cause }),
-    });
+  const initSchema = (site: SiteDb): void => {
+    site.db.exec(MIGRATIONS_TABLE_SQL);
+  };
+
+  const openSite = (siteId: SiteId): Effect.Effect<SiteDb, DbOperationError, Scope.Scope> => {
+    const storageKey = siteStorageKey(siteId);
+    return connections.open(path.join(config.storageRoot, `${storageKey}.sqlite`), initSchema);
+  };
 
   const runSync = <A>(operation: string, f: () => A): Effect.Effect<A, DbOperationError> =>
     Effect.try({
@@ -430,7 +412,7 @@ const make = Effect.gen(function* () {
                 }),
         });
         return result;
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const getRow = Effect.fn("Schema.getRow")(
@@ -446,7 +428,7 @@ const make = Effect.gen(function* () {
         const site = yield* openSite(siteId);
         yield* getTableColumns(site, table);
         return yield* runSync("getRow", () => selectRow(site, table, id));
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const listRows = Effect.fn("Schema.listRows")(
@@ -504,7 +486,7 @@ const make = Effect.gen(function* () {
             : undefined;
 
         return nextCursor !== undefined ? { rows: page, nextCursor } : { rows: page };
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const insertRow = Effect.fn("Schema.insertRow")(
@@ -551,7 +533,7 @@ const make = Effect.gen(function* () {
           at: new Date(createdAt).toISOString(),
         });
         return row;
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const updateRow = Effect.fn("Schema.updateRow")(
@@ -632,7 +614,7 @@ const make = Effect.gen(function* () {
           at: new Date(updatedAt).toISOString(),
         });
         return row;
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const deleteRow = Effect.fn("Schema.deleteRow")(
@@ -682,7 +664,7 @@ const make = Effect.gen(function* () {
           id: DocumentId.make(id),
           at,
         });
-      }),
+      }).pipe(Effect.scoped),
   );
 
   return { applyMigrations, getRow, listRows, insertRow, updateRow, deleteRow } satisfies SchemaApi;

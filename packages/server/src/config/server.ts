@@ -10,10 +10,13 @@ export const serverConfig = Config.all({
   host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
 });
 
+export const DEFAULT_UPLOAD_MAX_BYTES = 10_000_000;
+
 export class AppConfigService extends Context.Service<
   AppConfigService,
   {
     readonly siteBucket: string;
+    readonly uploadMaxBytes: number;
   }
 >()("forge/AppConfigService") {
   static readonly layer = Layer.effect(
@@ -22,15 +25,20 @@ export class AppConfigService extends Context.Service<
       const siteBucket = yield* Config.string("SITE_BUCKET").pipe(
         Config.withDefault("forge-sites"),
       );
+      const uploadMaxBytes = yield* Config.number("UPLOAD_MAX_BYTES").pipe(
+        Config.withDefault(DEFAULT_UPLOAD_MAX_BYTES),
+      );
 
       return {
         siteBucket,
+        uploadMaxBytes,
       };
     }),
   );
 
   static readonly testLayer = Layer.succeed(AppConfigService, {
     siteBucket: "forge-sites-test",
+    uploadMaxBytes: DEFAULT_UPLOAD_MAX_BYTES,
   });
 }
 

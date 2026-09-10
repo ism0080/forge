@@ -1,9 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
+import {
+  ConfigProvider,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
 import * as Result from "effect/Result";
-import { SiteId } from "@ism0080/forge-core";
+import { SiteId, type SchemaRowChangeEvent } from "@ism0080/forge-core";
 import {
   SchemaInvalidInputError,
   SchemaMigrationError,
@@ -11,7 +20,11 @@ import {
   SchemaService,
   SchemaServiceLayer,
 } from "../src/services/db/schema-service.js";
-import { DbEventsInMemoryLayer, DbEventsService } from "../src/services/db/events.js";
+import {
+  DbEventsInMemoryLayer,
+  DbEventsService,
+  type ForgeDbEvent,
+} from "../src/services/db/events.js";
 import { SiteConnectionsLayer } from "../src/services/db/sqlite-connection.js";
 
 const siteId = SiteId.make("site-a");
@@ -401,27 +414,21 @@ describe("SchemaService events", () => {
       Effect.gen(function* () {
         const events = yield* DbEventsService;
         const schema = yield* SchemaService;
-        const received: Array<{ type: string; table: string; row?: Record<string, unknown> }> = [];
-        const unsubscribe = yield* events.subscribe(
-          (event) => {
-            if (typeof Reflect.get(event, "table") === "string") {
-              received.push({
-                type: event.type,
-                table: String(Reflect.get(event, "table")),
-                ...(Reflect.get(event, "row") !== undefined
-                  ? { row: Reflect.get(event, "row") as Record<string, unknown> }
-                  : {}),
-              });
-            }
-          },
-          { siteId, table: "users" },
-        );
+
+        const isRowEvent = (event: ForgeDbEvent): event is SchemaRowChangeEvent =>
+          Predicate.hasProperty(event, "table");
+
+        const receivedFiber = yield* events
+          .stream({ siteId, table: "users" })
+          .pipe(Stream.filter(isRowEvent), Stream.take(3), Stream.runCollect, Effect.forkChild);
+        yield* Effect.yieldNow;
 
         const inserted = yield* schema.insertRow(siteId, "users", { name: "Amy" });
         const id = inserted.id as string;
         yield* schema.updateRow(siteId, "users", id, { data: { name: "Amelia" } });
         yield* schema.deleteRow(siteId, "users", id);
-        unsubscribe();
+
+        const received = [...(yield* Fiber.join(receivedFiber))];
 
         expect(received.map((event) => event.type)).toEqual(["created", "updated", "deleted"]);
         expect(received.map((event) => event.table)).toEqual(["users", "users", "users"]);

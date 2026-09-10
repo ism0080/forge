@@ -60,9 +60,16 @@ Database:
   triggers; `search=<text>` on the list endpoint.
 - Drizzle-table row CRUD with typed SDK mapping; ordered migrations with hashes,
   ordering/immutability checks, and configurable limits.
-- Realtime create/update/delete events over websocket for collections and tables.
+- Realtime create/update/delete events over websocket for collections and tables,
+  fanned out through an Effect `PubSub` with a bounded per-subscriber sliding
+  queue for backpressure.
 
 Other:
+
+- Effect-native runtime: `RcMap`-managed per-site SQLite connections with an
+  idle TTL, typed `Schema.TaggedErrorClass` API errors shared through the
+  contract, and raw `application/octet-stream` uploads with a configurable size
+  limit (`UPLOAD_MAX_BYTES`).
 
 - Scheduled jobs: per-site cron jobs stored in SQLite, executed by a background
   runner that forwards each occurrence through the webhook gateway. Exposed over
@@ -96,14 +103,15 @@ Routing and hosting:
 - Host-based subdomains in `nginx/default.conf` serve `index.html` for every
   path, so subdomain assets are broken. `/s/<siteId>/` is the supported route;
   either fix or remove subdomain routing.
-- Static responses have no caching/ETag; uploads send no content type (the
-  server infers it from the file extension).
+- Static responses have no caching/ETag; uploads store a content type but the
+  server still falls back to extension inference when serving.
 
 API:
 
-- No upload size/type limits; base64 bodies are buffered in memory.
-- Websocket subscriptions rely on network trust, with only a fixed sliding queue
-  for backpressure.
+- Websocket subscriptions rely on network trust; backpressure is a bounded
+  per-subscriber sliding queue (drop-oldest), so a stalled client can miss
+  events.
+- Uploads enforce a size limit but not content-type allowlisting.
 
 DX:
 
@@ -114,8 +122,9 @@ DX:
 
 Ops:
 
-- No backup/restore tooling beyond SQLite `VACUUM INTO` guidance, and no
-  retention for stale databases or uploads.
+- No backup/restore tooling beyond SQLite `VACUUM INTO` guidance, and no file
+  retention for stale databases or uploads (idle connections are reaped after
+  `SITE_DB_IDLE_TTL_MS`).
 - `node:sqlite` is experimental; Docker builds on `node:25` while `.nvmrc` pins
   v26.
 

@@ -1,4 +1,13 @@
-import { SchemaListQuerySchema, SchemaListResponseSchema, SiteId } from "../index.js";
+import {
+  InternalError,
+  SchemaInvalidInputError,
+  SchemaListQuerySchema,
+  SchemaListResponseSchema,
+  SchemaMigrationError,
+  SchemaRowConflictError,
+  SchemaRowNotFoundError,
+  SiteId,
+} from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
@@ -18,23 +27,13 @@ const ApplyMigrationsResponseSchema = Schema.Struct({
   applied: Schema.Array(Schema.String),
 });
 
-const RowNotFoundError = Schema.Struct({
-  error: Schema.Literal("row not found"),
-}).pipe(HttpApiSchema.status("NotFound"));
-
-const RowConflictError = Schema.Struct({
-  error: Schema.Literal("version conflict"),
-}).pipe(HttpApiSchema.status("Conflict"));
-
-const BadRequestError = Schema.Struct({
-  error: Schema.String,
-}).pipe(HttpApiSchema.status("BadRequest"));
-
-const InternalError = Schema.Struct({
-  error: Schema.Literal("internal error"),
-}).pipe(HttpApiSchema.status("InternalServerError"));
-
-const SchemaErrors = [RowNotFoundError, RowConflictError, InternalError, BadRequestError];
+const SchemaErrors = [
+  SchemaRowNotFoundError,
+  SchemaRowConflictError,
+  SchemaMigrationError,
+  SchemaInvalidInputError,
+  InternalError,
+];
 
 export const SchemaGroup = HttpApiGroup.make("server.schema").add(
   HttpApiEndpoint.post("schema.migrations.apply", "/api/db/migrations", {

@@ -1,5 +1,5 @@
 import type { DbChangeEvent, SchemaRowChangeEvent } from "@ism0080/forge-core";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Predicate, PubSub, Stream } from "effect";
 
 export type ForgeDbEvent = DbChangeEvent | SchemaRowChangeEvent;
 
@@ -9,19 +9,19 @@ export interface DbEventFilter {
   readonly table?: string;
 }
 
-export type DbEventListener = (event: ForgeDbEvent) => void;
+const DB_EVENT_BACKLOG = 256;
 
 export interface DbEventsApi {
-  readonly publish: (event: ForgeDbEvent) => Effect.Effect<void, never>;
-  readonly subscribe: (
-    listener: DbEventListener,
-    filter?: DbEventFilter,
-  ) => Effect.Effect<() => void, never>;
+  readonly publish: (event: ForgeDbEvent) => Effect.Effect<void>;
+  readonly stream: (filter?: DbEventFilter) => Stream.Stream<ForgeDbEvent>;
 }
 
 export class DbEventsService extends Context.Service<DbEventsService, DbEventsApi>()(
   "forge/DbEventsService",
 ) {}
+
+const isSchemaRowEvent = (event: ForgeDbEvent): event is SchemaRowChangeEvent =>
+  Predicate.hasProperty(event, "table");
 
 const matchesFilter = (event: ForgeDbEvent, filter?: DbEventFilter): boolean => {
   if (!filter) {
@@ -31,55 +31,43 @@ const matchesFilter = (event: ForgeDbEvent, filter?: DbEventFilter): boolean => 
     return false;
   }
   if (filter.collection !== undefined) {
-    return Reflect.get(event, "collection") === filter.collection;
+    return !isSchemaRowEvent(event) && event.collection === filter.collection;
   }
   if (filter.table !== undefined) {
-    return Reflect.get(event, "table") === filter.table;
+    return isSchemaRowEvent(event) && event.table === filter.table;
   }
   return true;
 };
 
-export const DbEventsInMemoryLayer = Layer.sync(DbEventsService, () => {
-  const listeners = new Set<{ listener: DbEventListener; filter?: DbEventFilter }>();
-
-  return {
-    publish: (event) =>
-      Effect.sync(() => {
-        for (const entry of listeners) {
-          if (!matchesFilter(event, entry.filter)) {
-            continue;
-          }
-          Effect.runSync(
-            Effect.try({ try: () => entry.listener(event), catch: () => undefined }).pipe(
-              Effect.ignore,
-            ),
-          );
-        }
-      }),
-    subscribe: (listener, filter) =>
-      Effect.sync(() => {
-        const entry = filter ? { listener, filter } : { listener };
-        listeners.add(entry);
-        return () => {
-          listeners.delete(entry);
-        };
-      }),
-  };
-});
+export const DbEventsInMemoryLayer = Layer.effect(
+  DbEventsService,
+  Effect.gen(function* () {
+    // `sliding` keeps a bounded per-subscriber queue so a slow websocket
+    // client cannot block database writers or grow memory without limit.
+    const pubsub = yield* PubSub.sliding<ForgeDbEvent>(DB_EVENT_BACKLOG);
+    return {
+      publish: (event) => PubSub.publish(pubsub, event).pipe(Effect.ignore),
+      stream: (filter) => {
+        const source = Stream.fromPubSub(pubsub);
+        return filter === undefined
+          ? source
+          : source.pipe(Stream.filter((event) => matchesFilter(event, filter)));
+      },
+    } satisfies DbEventsApi;
+  }),
+);
 
 const eventScope = (event: ForgeDbEvent): string =>
-  typeof Reflect.get(event, "collection") === "string"
-    ? Reflect.get(event, "collection")
-    : `tables/${String(Reflect.get(event, "table"))}`;
+  isSchemaRowEvent(event) ? `tables/${event.table}` : event.collection;
 
 export const DbEventsConsoleTapLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const context = yield* Effect.context<never>();
     const events = yield* DbEventsService;
-    yield* events.subscribe((event) => {
-      Effect.log(`db event ${event.type} ${event.siteId}/${eventScope(event)}/${event.id}`).pipe(
-        Effect.runForkWith(context),
-      );
-    });
+    yield* events.stream().pipe(
+      Stream.runForEach((event) =>
+        Effect.log(`db event ${event.type} ${event.siteId}/${eventScope(event)}/${event.id}`),
+      ),
+      Effect.forkScoped,
+    );
   }),
 );

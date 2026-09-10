@@ -1,7 +1,7 @@
 import { Config, Context, Effect, Layer, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { StorageError } from "@ism0080/forge-core";
+import { StorageError, StorageNotFoundError } from "@ism0080/forge-core";
 import { type StorageApi, StorageService } from "./service.js";
 
 export interface LocalFileStorageConfig {
@@ -80,10 +80,18 @@ const make = Effect.gen(function* () {
   );
 
   const getObject = Effect.fn("Storage.getObject")(
-    (bucket: string, key: string): Effect.Effect<Uint8Array, StorageError> =>
+    (bucket: string, key: string): Effect.Effect<Uint8Array, StorageError | StorageNotFoundError> =>
       fs
         .readFile(objectPath(bucket, key))
-        .pipe(Effect.mapError(toStorageError("getObject", bucket, key))),
+        .pipe(
+          Effect.catchTag(
+            "PlatformError",
+            (error): Effect.Effect<never, StorageError | StorageNotFoundError> =>
+              error.reason._tag === "NotFound"
+                ? Effect.fail(new StorageNotFoundError({ bucket, key }))
+                : Effect.fail(toStorageError("getObject", bucket, key)(error)),
+          ),
+        ),
   );
 
   const listKeys = Effect.fn("Storage.listKeys")(

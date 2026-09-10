@@ -1,8 +1,12 @@
 import {
   DocumentId,
+  InternalError,
+  JobConflictError,
   JobCreateRequestSchema,
   JobDeleteResponseSchema,
+  JobInvalidInputError,
   JobListResponseSchema,
+  JobNotFoundError,
   JobResponseSchema,
   JobUpdateRequestSchema,
   SiteId,
@@ -10,23 +14,7 @@ import {
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-const JobNotFoundError = Schema.Struct({
-  error: Schema.Literal("job not found"),
-}).pipe(HttpApiSchema.status("NotFound"));
-
-const JobConflictError = Schema.Struct({
-  error: Schema.Literal("version conflict"),
-}).pipe(HttpApiSchema.status("Conflict"));
-
-const JobBadRequestError = Schema.Struct({
-  error: Schema.String,
-}).pipe(HttpApiSchema.status("BadRequest"));
-
-const JobInternalError = Schema.Struct({
-  error: Schema.Literal("internal error"),
-}).pipe(HttpApiSchema.status("InternalServerError"));
-
-const JobErrors = [JobNotFoundError, JobConflictError, JobInternalError, JobBadRequestError];
+const JobErrors = [JobNotFoundError, JobConflictError, JobInvalidInputError, InternalError];
 
 export const JobsGroup = HttpApiGroup.make("server.jobs").add(
   HttpApiEndpoint.get("jobs.list", "/api/jobs", {

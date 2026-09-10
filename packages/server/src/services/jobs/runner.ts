@@ -1,4 +1,4 @@
-import { Config, Duration, Effect, Layer } from "effect";
+import { Config, Duration, Effect, Layer, Schedule } from "effect";
 import { DbClockService } from "../db/shared.js";
 import { JobsService } from "./service.js";
 
@@ -14,7 +14,7 @@ export const JobRunnerLayer = Layer.effectDiscard(
     const jobs = yield* JobsService;
     const clock = yield* DbClockService;
 
-    const loop = Effect.gen(function* () {
+    const runOnce = Effect.gen(function* () {
       const now = yield* clock.currentTimeMs;
       const processed = yield* jobs.runDue(now).pipe(
         Effect.catchCause((cause) =>
@@ -24,9 +24,14 @@ export const JobRunnerLayer = Layer.effectDiscard(
       if (processed > 0) {
         yield* Effect.log(`job runner processed ${processed} job(s)`);
       }
-      yield* Effect.sleep(Duration.millis(Math.max(1_000, intervalMs)));
-    });
+    }).pipe(Effect.withSpan("JobRunner.tick"));
 
-    yield* Effect.forkScoped(Effect.forever(loop));
+    yield* Effect.forkScoped(
+      runOnce.pipe(
+        Effect.repeat(
+          Schedule.spaced(Duration.millis(Math.max(1_000, intervalMs))).pipe(Schedule.jittered),
+        ),
+      ),
+    );
   }),
 );

@@ -259,14 +259,46 @@ export class ForgeApiError extends Error {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const ERROR_CODE_BY_TAG: Record<string, string> = {
+  DocumentNotFoundError: "document not found",
+  VersionConflictError: "version conflict",
+  JobNotFoundError: "job not found",
+  JobConflictError: "version conflict",
+  SchemaRowNotFoundError: "row not found",
+  SchemaRowConflictError: "version conflict",
+  SiteNotFoundError: "not found",
+  UploadTooLargeError: "upload too large",
+};
+
 const errorCode = (error: unknown): string => {
-  if (isRecord(error) && typeof error.error === "string") {
-    return error.error;
+  if (isRecord(error)) {
+    if (typeof error._tag === "string") {
+      const mapped = ERROR_CODE_BY_TAG[error._tag];
+      if (mapped !== undefined) {
+        return mapped;
+      }
+      if (typeof error.message === "string" && error.message.length > 0) {
+        return error.message;
+      }
+      return error._tag;
+    }
+    if (typeof error.error === "string") {
+      return error.error;
+    }
   }
   if (error instanceof Error) {
     return error.message;
   }
   return "unknown error";
+};
+
+const decodeBase64 = (value: string): Uint8Array => {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 };
 
 const toForgeApiError = (error: unknown): ForgeApiError =>
@@ -429,9 +461,9 @@ export const createClient = ({ baseUrl, siteId = "" }: ForgeClientOptions) => {
     },
     jobs: {
       list: () =>
-        run(client["server.jobs"]["jobs.list"]({ query: { siteId: site } })).then(
-          ({ jobs }) => [...jobs],
-        ),
+        run(client["server.jobs"]["jobs.list"]({ query: { siteId: site } })).then(({ jobs }) => [
+          ...jobs,
+        ]),
       get: (id: string) =>
         run(
           client["server.jobs"]["jobs.get"]({
@@ -488,12 +520,12 @@ export const createClient = ({ baseUrl, siteId = "" }: ForgeClientOptions) => {
     upload: (input: UploadInput) =>
       run(
         client["server.upload"]["upload.create"]({
-          payload: {
+          query: {
             siteId: site,
             path: input.path,
-            contentBase64: input.contentBase64,
             ...(input.contentType ? { contentType: input.contentType } : {}),
           },
+          payload: decodeBase64(input.contentBase64),
         }),
       ),
     plugins: {

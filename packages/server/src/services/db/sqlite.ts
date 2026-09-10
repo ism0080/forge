@@ -1,4 +1,4 @@
-import { Config, Context, Effect, Layer, Match, Schema } from "effect";
+import { Config, Context, Effect, Layer, Match, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -217,26 +217,20 @@ const make = Effect.gen(function* () {
 
   const connections = yield* SiteConnectionsService;
 
-  const openSite = (siteId: SiteId): Effect.Effect<SiteDb, DbOperationError> =>
-    Effect.try({
-      try: () => {
-        const storageKey = siteStorageKey(siteId);
-        return connections.open(
-          storageKey,
-          path.join(config.storageRoot, `${storageKey}.sqlite`),
-          (site) => {
-            site.db.exec(CREATE_DOCUMENTS_SQL);
-            site.db.exec(CREATE_CREATED_INDEX_SQL);
-            site.db.exec(CREATE_UPDATED_INDEX_SQL);
-            site.db.exec(CREATE_META_SQL);
-            site.db.exec(CREATE_DOCUMENTS_FTS_SQL);
-            site.db.exec(CREATE_DOCUMENTS_FTS_TRIGGERS_SQL);
-            backfillDocumentsFts(site);
-          },
-        );
-      },
-      catch: (cause) => new DbOperationError({ operation: "openDatabase", cause }),
-    });
+  const initDocuments = (site: SiteDb): void => {
+    site.db.exec(CREATE_DOCUMENTS_SQL);
+    site.db.exec(CREATE_CREATED_INDEX_SQL);
+    site.db.exec(CREATE_UPDATED_INDEX_SQL);
+    site.db.exec(CREATE_META_SQL);
+    site.db.exec(CREATE_DOCUMENTS_FTS_SQL);
+    site.db.exec(CREATE_DOCUMENTS_FTS_TRIGGERS_SQL);
+    backfillDocumentsFts(site);
+  };
+
+  const openSite = (siteId: SiteId): Effect.Effect<SiteDb, DbOperationError, Scope.Scope> => {
+    const storageKey = siteStorageKey(siteId);
+    return connections.open(path.join(config.storageRoot, `${storageKey}.sqlite`), initDocuments);
+  };
 
   const runSync = <A>(operation: string, f: () => A): Effect.Effect<A, DbOperationError> =>
     Effect.try({
@@ -313,7 +307,7 @@ const make = Effect.gen(function* () {
         });
 
         return document;
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const getDocument = Effect.fn("Database.getDocument")(
@@ -336,7 +330,7 @@ const make = Effect.gen(function* () {
           return yield* new DocumentNotFoundError({ siteId, collection, id });
         }
         return yield* parseRow(siteId, collection, row);
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const updateDocument = Effect.fn("Database.updateDocument")(
@@ -414,7 +408,7 @@ const make = Effect.gen(function* () {
         });
 
         return updated;
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const deleteDocument = Effect.fn("Database.deleteDocument")(
@@ -473,7 +467,7 @@ const make = Effect.gen(function* () {
           id,
           at,
         });
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const resolveCursor = (
@@ -571,7 +565,7 @@ const make = Effect.gen(function* () {
         const nextCursor = hasMore && tail !== undefined ? cursorForDocument(tail) : undefined;
 
         return nextCursor !== undefined ? { documents, nextCursor } : { documents };
-      }),
+      }).pipe(Effect.scoped),
   );
 
   return {

@@ -368,7 +368,14 @@ When `spa` is `true`, non-asset route misses fall back to `index.html` for clien
 
 ## Notes
 
-- The upload API accepts base64 payloads for simplicity.
+- `POST /api/upload` takes the raw file body (`application/octet-stream`) with
+  `siteId`, `path`, and optional `contentType` as query parameters, so the server
+  never buffers a base64 copy; the request body is capped at `UPLOAD_MAX_BYTES`
+  (default 10 MB) at the HTTP layer so oversized uploads are rejected before
+  they are buffered. The SDK's `client.upload({ path,
+  contentBase64 })` decodes the base64 locally and sends raw bytes.
 - Uploaded assets are stored on the local filesystem under the configured storage root (`STORAGE_ROOT`, default `./data`).
+- Per-site SQLite connections are reference-counted and closed after
+  `SITE_DB_IDLE_TTL_MS` (default 5 minutes) idle.
 - The NGINX config maps root requests to `index.html` for host-based sites.
 - This is intentionally small and meant to be extended with richer plugin APIs.

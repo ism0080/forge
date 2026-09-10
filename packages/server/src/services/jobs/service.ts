@@ -1,7 +1,15 @@
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Layer, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { DbOperationError, DocumentId, JobDefinitionSchema, SiteId } from "@ism0080/forge-core";
+import {
+  DbOperationError,
+  DocumentId,
+  JobConflictError,
+  JobDefinitionSchema,
+  JobInvalidInputError,
+  JobNotFoundError,
+  SiteId,
+} from "@ism0080/forge-core";
 import type { JobDefinition } from "@ism0080/forge-core";
 import { DbClockLayer, DbClockService, randomId, siteStorageKey } from "../db/shared.js";
 import { prepareStatement, SiteConnectionsService } from "../db/sqlite-connection.js";
@@ -13,29 +21,7 @@ type JobPayload = Schema.Schema.Type<typeof Schema.Json>;
 
 const JobPayloadFromJson = Schema.fromJsonString(Schema.Json);
 
-export class JobNotFoundError extends Schema.TaggedErrorClass<JobNotFoundError>()(
-  "JobNotFoundError",
-  {
-    siteId: SiteId,
-    id: DocumentId,
-  },
-) {}
-
-export class JobConflictError extends Schema.TaggedErrorClass<JobConflictError>()(
-  "JobConflictError",
-  {
-    id: DocumentId,
-    expectedVersion: Schema.Number,
-    actualVersion: Schema.Number,
-  },
-) {}
-
-export class JobInvalidInputError extends Schema.TaggedErrorClass<JobInvalidInputError>()(
-  "JobInvalidInputError",
-  {
-    message: Schema.String,
-  },
-) {}
+export { JobConflictError, JobInvalidInputError, JobNotFoundError };
 
 export type JobError = JobNotFoundError | JobConflictError | JobInvalidInputError | DbOperationError;
 
@@ -161,18 +147,10 @@ const make = Effect.gen(function* () {
     site.db.exec(CREATE_JOBS_DUE_INDEX_SQL);
   };
 
-  const openSite = (siteId: SiteId): Effect.Effect<SiteDb, DbOperationError> =>
-    Effect.try({
-      try: () => {
-        const storageKey = siteStorageKey(siteId);
-        return connections.open(
-          storageKey,
-          path.join(config.storageRoot, `${storageKey}.sqlite`),
-          initJobs,
-        );
-      },
-      catch: (cause) => new DbOperationError({ operation: "openJobsDatabase", cause }),
-    });
+  const openSite = (siteId: SiteId): Effect.Effect<SiteDb, DbOperationError, Scope.Scope> => {
+    const storageKey = siteStorageKey(siteId);
+    return connections.open(path.join(config.storageRoot, `${storageKey}.sqlite`), initJobs);
+  };
 
   const runSync = <A>(operation: string, f: () => A): Effect.Effect<A, DbOperationError> =>
     Effect.try({
@@ -236,7 +214,7 @@ const make = Effect.gen(function* () {
           () => prepareStatement(site, SELECT_JOBS_SQL).all(siteId) as unknown as JobRow[],
         );
         return yield* Effect.forEach(rows, parseJob);
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const getJob = Effect.fn("Jobs.getJob")(
@@ -251,7 +229,7 @@ const make = Effect.gen(function* () {
           return yield* new JobNotFoundError({ siteId, id });
         }
         return yield* parseJob(row);
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const createJob = Effect.fn("Jobs.createJob")(
@@ -301,7 +279,7 @@ const make = Effect.gen(function* () {
           return yield* new DbOperationError({ operation: "createJob", cause: "job missing" });
         }
         return yield* parseJob(row);
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const resolveUpdate = (
@@ -403,7 +381,7 @@ const make = Effect.gen(function* () {
           return yield* new DbOperationError({ operation: "updateJob", cause: "job missing" });
         }
         return yield* parseJob(row);
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const deleteJob = Effect.fn("Jobs.deleteJob")(
@@ -431,7 +409,7 @@ const make = Effect.gen(function* () {
             siteId,
           ),
         );
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const executeRow = (site: SiteDb, row: JobRow, nowMs: number): Effect.Effect<boolean, DbOperationError> =>
@@ -471,17 +449,13 @@ const make = Effect.gen(function* () {
           return yield* new JobNotFoundError({ siteId, id });
         }
         return yield* parseJob(row);
-      }),
+      }).pipe(Effect.scoped),
   );
 
   const runSiteDue = (entry: string, nowMs: number): Effect.Effect<number, DbOperationError> =>
     Effect.gen(function* () {
-      const key = entry.slice(0, -".sqlite".length);
       const file = path.join(config.storageRoot, entry);
-      const site = yield* Effect.try({
-        try: () => connections.open(key, file, initJobs),
-        catch: (cause) => new DbOperationError({ operation: "openJobsDatabase", cause }),
-      });
+      const site = yield* connections.open(file, initJobs);
       const rows = yield* runSync(
         "listDueJobs",
         () => prepareStatement(site, SELECT_DUE_JOBS_SQL).all(nowMs) as unknown as JobRow[],
@@ -492,7 +466,7 @@ const make = Effect.gen(function* () {
         processed += 1;
       }
       return processed;
-    });
+    }).pipe(Effect.scoped);
 
   const runDue = Effect.fn("Jobs.runDue")(
     (nowMs: number): Effect.Effect<number, DbOperationError> =>

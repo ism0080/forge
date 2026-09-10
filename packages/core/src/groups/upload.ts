@@ -1,15 +1,17 @@
-import { UploadRequestSchema, UploadResponseSchema } from "../index.js";
+import {
+  InternalError,
+  UploadQuerySchema,
+  UploadResponseSchema,
+  UploadTooLargeError,
+} from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
-
-const UploadInternalError = Schema.Struct({
-  error: Schema.String,
-}).pipe(HttpApiSchema.status("InternalServerError"));
 
 export const UploadGroup = HttpApiGroup.make("server.upload").add(
   HttpApiEndpoint.post("upload.create", "/api/upload", {
     success: UploadResponseSchema.pipe(HttpApiSchema.status("Created")),
-    error: UploadInternalError,
-    payload: UploadRequestSchema,
+    error: [InternalError, UploadTooLargeError],
+    query: UploadQuerySchema,
+    payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
   }),
 );
