@@ -25,7 +25,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN nub install --prod --filter @ism0080/forge-server...
+RUN nub install --prod --ignore-scripts --filter @ism0080/forge-server...
 
 FROM node:25-alpine AS runtime
 
