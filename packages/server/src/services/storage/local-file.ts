@@ -1,4 +1,4 @@
-import { Config, Context, Effect, Layer, Option, Schema } from "effect";
+import { Config, Context, Effect, Layer, Option, Predicate, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { StorageError, StorageNotFoundError } from "@ism0080/forge-core";
@@ -87,7 +87,7 @@ const make = Effect.gen(function* () {
           Effect.catchTag(
             "PlatformError",
             (error): Effect.Effect<never, StorageError | StorageNotFoundError> =>
-              error.reason._tag === "NotFound"
+              Predicate.isTagged(error.reason, "NotFound")
                 ? Effect.fail(new StorageNotFoundError({ bucket, key }))
                 : Effect.fail(toStorageError("getObject", bucket, key)(error)),
           ),

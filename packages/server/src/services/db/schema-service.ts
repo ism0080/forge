@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Config, Context, Effect, Layer, Schema, Scope } from "effect";
+import { Config, Context, Data, Effect, Layer, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -46,6 +46,32 @@ interface StoredMigration {
   readonly id: string;
   readonly hash: string;
 }
+
+type RowWriteOutcome = Data.TaggedEnum<{
+  missing: {};
+  conflict: { readonly actualVersion: number };
+  updated: {};
+}>;
+
+const {
+  missing: rowWriteMissing,
+  conflict: rowWriteConflict,
+  updated: rowWritten,
+  $match: matchRowWriteOutcome,
+} = Data.taggedEnum<RowWriteOutcome>();
+
+type RowDeleteOutcome = Data.TaggedEnum<{
+  missing: {};
+  conflict: { readonly actualVersion: number };
+  deleted: {};
+}>;
+
+const {
+  missing: rowDeleteMissing,
+  conflict: rowDeleteConflict,
+  deleted: rowDeleted,
+  $match: matchRowDeleteOutcome,
+} = Data.taggedEnum<RowDeleteOutcome>();
 
 export interface SchemaMigration {
   readonly id: string;
@@ -481,9 +507,7 @@ const make = Effect.gen(function* () {
         const page = hasMore ? rows.slice(0, limit) : rows;
         const tail = page[page.length - 1];
         const nextCursor =
-          hasMore && tail !== undefined
-            ? makeListCursor(tail[createdColumn], tail.id)
-            : undefined;
+          hasMore && tail !== undefined ? makeListCursor(tail[createdColumn], tail.id) : undefined;
 
         return nextCursor !== undefined ? { rows: page, nextCursor } : { rows: page };
       }).pipe(Effect.scoped),
@@ -563,12 +587,14 @@ const make = Effect.gen(function* () {
         const outcome = yield* runSync("updateRow", () =>
           runInTransaction(site, () => {
             const existing = selectRow(site, table, id);
-            if (existing === undefined) return { _tag: "missing" } as const;
+            if (existing === undefined) return rowWriteMissing();
             if (
               typeof input.expectedVersion === "number" &&
               existing.version !== input.expectedVersion
             ) {
-              return { _tag: "conflict", actualVersion: existing.version } as const;
+              return rowWriteConflict({
+                actualVersion: typeof existing.version === "number" ? existing.version : Number.NaN,
+              });
             }
             const sets = dataColumns.map((column) => `${quoteIdentifier(column)} = ?`);
             const params: SqliteValue[] = [...values];
@@ -586,34 +612,37 @@ const make = Effect.gen(function* () {
               site,
               `UPDATE ${quoteIdentifier(table)} SET ${sets.join(", ")} WHERE ${quoteIdentifier("id")} = ?`,
             ).run(...params, id);
-            return { _tag: "updated" } as const;
+            return rowWritten();
           }),
         );
-        if (outcome._tag === "missing") {
-          return yield* new SchemaRowNotFoundError({ siteId, table, id });
-        }
-        if (outcome._tag === "conflict") {
-          return yield* new SchemaRowConflictError({
-            table,
-            id,
-            expectedVersion: input.expectedVersion ?? 0,
-            actualVersion:
-              typeof outcome.actualVersion === "number" ? outcome.actualVersion : Number.NaN,
-          });
-        }
-        const row = yield* runSync("updateRow", () => selectRow(site, table, id));
-        if (row === undefined) {
-          return yield* new SchemaRowNotFoundError({ siteId, table, id });
-        }
-        yield* events.publish({
-          type: "updated",
-          siteId,
-          table,
-          id: DocumentId.make(id),
-          row,
-          at: new Date(updatedAt).toISOString(),
+        return yield* matchRowWriteOutcome(outcome, {
+          missing: () => Effect.fail(new SchemaRowNotFoundError({ siteId, table, id })),
+          conflict: (value) =>
+            Effect.fail(
+              new SchemaRowConflictError({
+                table,
+                id,
+                expectedVersion: input.expectedVersion ?? 0,
+                actualVersion: value.actualVersion,
+              }),
+            ),
+          updated: () =>
+            Effect.gen(function* () {
+              const row = yield* runSync("updateRow", () => selectRow(site, table, id));
+              if (row === undefined) {
+                return yield* new SchemaRowNotFoundError({ siteId, table, id });
+              }
+              yield* events.publish({
+                type: "updated",
+                siteId,
+                table,
+                id: DocumentId.make(id),
+                row,
+                at: new Date(updatedAt).toISOString(),
+              });
+              return row;
+            }),
         });
-        return row;
       }).pipe(Effect.scoped),
   );
 
@@ -630,39 +659,44 @@ const make = Effect.gen(function* () {
         const outcome = yield* runSync("deleteRow", () =>
           runInTransaction(site, () => {
             const existing = selectRow(site, table, id);
-            if (existing === undefined) return { _tag: "missing" } as const;
+            if (existing === undefined) return rowDeleteMissing();
             if (
               typeof input?.expectedVersion === "number" &&
               existing.version !== input.expectedVersion
             ) {
-              return { _tag: "conflict", actualVersion: existing.version } as const;
+              return rowDeleteConflict({
+                actualVersion: typeof existing.version === "number" ? existing.version : Number.NaN,
+              });
             }
             prepareStatement(
               site,
               `DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier("id")} = ?`,
             ).run(id);
-            return { _tag: "deleted" } as const;
+            return rowDeleted();
           }),
         );
-        if (outcome._tag === "missing") {
-          return yield* new SchemaRowNotFoundError({ siteId, table, id });
-        }
-        if (outcome._tag === "conflict") {
-          return yield* new SchemaRowConflictError({
-            table,
-            id,
-            expectedVersion: input?.expectedVersion ?? 0,
-            actualVersion:
-              typeof outcome.actualVersion === "number" ? outcome.actualVersion : Number.NaN,
-          });
-        }
-        const at = yield* clock.currentTimeIso;
-        yield* events.publish({
-          type: "deleted",
-          siteId,
-          table,
-          id: DocumentId.make(id),
-          at,
+        yield* matchRowDeleteOutcome(outcome, {
+          missing: () => Effect.fail(new SchemaRowNotFoundError({ siteId, table, id })),
+          conflict: (value) =>
+            Effect.fail(
+              new SchemaRowConflictError({
+                table,
+                id,
+                expectedVersion: input?.expectedVersion ?? 0,
+                actualVersion: value.actualVersion,
+              }),
+            ),
+          deleted: () =>
+            Effect.gen(function* () {
+              const at = yield* clock.currentTimeIso;
+              yield* events.publish({
+                type: "deleted",
+                siteId,
+                table,
+                id: DocumentId.make(id),
+                at,
+              });
+            }),
         });
       }).pipe(Effect.scoped),
   );

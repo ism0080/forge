@@ -1,4 +1,4 @@
-import { Config, Context, Effect, Layer, Match, Schema, Scope } from "effect";
+import { Config, Context, Data, Effect, Layer, Match, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -59,6 +59,32 @@ interface DocumentRow {
   readonly created_at: string;
   readonly updated_at: string;
 }
+
+type DocumentWriteOutcome = Data.TaggedEnum<{
+  missing: {};
+  conflict: { readonly actualVersion: number };
+  written: { readonly createdAt: string; readonly version: number };
+}>;
+
+const {
+  missing: documentMissing,
+  conflict: documentConflict,
+  written: documentWritten,
+  $match: matchDocumentWriteOutcome,
+} = Data.taggedEnum<DocumentWriteOutcome>();
+
+type DocumentDeleteOutcome = Data.TaggedEnum<{
+  missing: {};
+  conflict: { readonly actualVersion: number };
+  deleted: {};
+}>;
+
+const {
+  missing: documentDeleteMissing,
+  conflict: documentDeleteConflict,
+  deleted: documentDeleted,
+  $match: matchDocumentDeleteOutcome,
+} = Data.taggedEnum<DocumentDeleteOutcome>();
 
 interface Cursor {
   readonly createdAt: string;
@@ -352,16 +378,13 @@ const make = Effect.gen(function* () {
                WHERE collection = ? AND id = ?`,
             ).get(collection, id) as DocumentRow | undefined;
             if (row === undefined) {
-              return { _tag: "missing" } as const;
+              return documentMissing();
             }
             if (
               typeof input.expectedVersion === "number" &&
               row.version !== input.expectedVersion
             ) {
-              return {
-                _tag: "conflict",
-                actualVersion: row.version,
-              } as const;
+              return documentConflict({ actualVersion: row.version });
             }
             statement(
               site,
@@ -369,45 +392,44 @@ const make = Effect.gen(function* () {
                SET data = ?, version = version + 1, updated_at = ?
                WHERE collection = ? AND id = ?`,
             ).run(Schema.encodeSync(DbDocumentDataFromJson)(input.data), updatedAt, collection, id);
-            return {
-              _tag: "written",
-              createdAt: row.created_at,
-              version: row.version + 1,
-            } as const;
+            return documentWritten({ createdAt: row.created_at, version: row.version + 1 });
           }),
         );
 
-        if (outcome._tag === "missing") {
-          return yield* new DocumentNotFoundError({ siteId, collection, id });
-        }
-        if (outcome._tag === "conflict") {
-          return yield* new VersionConflictError({
-            id,
-            expectedVersion: input.expectedVersion ?? 0,
-            actualVersion: outcome.actualVersion,
-          });
-        }
+        return yield* matchDocumentWriteOutcome(outcome, {
+          missing: () => Effect.fail(new DocumentNotFoundError({ siteId, collection, id })),
+          conflict: (value) =>
+            Effect.fail(
+              new VersionConflictError({
+                id,
+                expectedVersion: input.expectedVersion ?? 0,
+                actualVersion: value.actualVersion,
+              }),
+            ),
+          written: (value) =>
+            Effect.gen(function* () {
+              const updated: DbDocument = {
+                id,
+                siteId,
+                collection,
+                data: input.data,
+                version: value.version,
+                createdAt: value.createdAt,
+                updatedAt,
+              };
 
-        const updated: DbDocument = {
-          id,
-          siteId,
-          collection,
-          data: input.data,
-          version: outcome.version,
-          createdAt: outcome.createdAt,
-          updatedAt,
-        };
+              yield* events.publish({
+                type: "updated",
+                siteId,
+                collection,
+                id,
+                document: updated,
+                at: updatedAt,
+              });
 
-        yield* events.publish({
-          type: "updated",
-          siteId,
-          collection,
-          id,
-          document: updated,
-          at: updatedAt,
+              return updated;
+            }),
         });
-
-        return updated;
       }).pipe(Effect.scoped),
   );
 
@@ -429,43 +451,43 @@ const make = Effect.gen(function* () {
                WHERE collection = ? AND id = ?`,
             ).get(collection, id) as DocumentRow | undefined;
             if (row === undefined) {
-              return { _tag: "missing" } as const;
+              return documentDeleteMissing();
             }
             if (
               typeof input?.expectedVersion === "number" &&
               row.version !== input.expectedVersion
             ) {
-              return {
-                _tag: "conflict",
-                actualVersion: row.version,
-              } as const;
+              return documentDeleteConflict({ actualVersion: row.version });
             }
             statement(site, "DELETE FROM documents WHERE collection = ? AND id = ?").run(
               collection,
               id,
             );
-            return { _tag: "deleted" } as const;
+            return documentDeleted();
           }),
         );
 
-        if (outcome._tag === "missing") {
-          return yield* new DocumentNotFoundError({ siteId, collection, id });
-        }
-        if (outcome._tag === "conflict") {
-          return yield* new VersionConflictError({
-            id,
-            expectedVersion: input?.expectedVersion ?? 0,
-            actualVersion: outcome.actualVersion,
-          });
-        }
-
-        const at = yield* clock.currentTimeIso;
-        yield* events.publish({
-          type: "deleted",
-          siteId,
-          collection,
-          id,
-          at,
+        yield* matchDocumentDeleteOutcome(outcome, {
+          missing: () => Effect.fail(new DocumentNotFoundError({ siteId, collection, id })),
+          conflict: (value) =>
+            Effect.fail(
+              new VersionConflictError({
+                id,
+                expectedVersion: input?.expectedVersion ?? 0,
+                actualVersion: value.actualVersion,
+              }),
+            ),
+          deleted: () =>
+            Effect.gen(function* () {
+              const at = yield* clock.currentTimeIso;
+              yield* events.publish({
+                type: "deleted",
+                siteId,
+                collection,
+                id,
+                at,
+              });
+            }),
         });
       }).pipe(Effect.scoped),
   );
