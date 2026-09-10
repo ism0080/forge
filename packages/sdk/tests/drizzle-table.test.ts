@@ -1,5 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  CollectionId,
+  DocumentId,
+  DocumentNotFoundError,
+  SiteId,
+  VersionConflictError,
+} from "@ism0080/forge-core";
 import { createClient, ForgeApiError } from "../src/index.js";
 
 const messages = sqliteTable("messages", {
@@ -126,12 +133,11 @@ describe("createClient", () => {
   it("rejects with a ForgeApiError carrying the server error code", async () => {
     fetchMock.mockImplementation(async () =>
       Response.json(
-        {
-          _tag: "DocumentNotFoundError",
-          siteId: "demo",
-          collection: "posts",
-          id: "missing",
-        },
+        new DocumentNotFoundError({
+          siteId: SiteId.make("demo"),
+          collection: CollectionId.make("posts"),
+          id: DocumentId.make("missing"),
+        }),
         { status: 404 },
       ),
     );
@@ -141,18 +147,20 @@ describe("createClient", () => {
     const error = await posts.get("missing").catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(ForgeApiError);
-    expect((error as ForgeApiError).code).toBe("document not found");
+    if (!(error instanceof ForgeApiError)) {
+      throw new Error("expected ForgeApiError");
+    }
+    expect(error.code).toBe("document not found");
   });
 
   it("surfaces version conflicts as ForgeApiError", async () => {
     fetchMock.mockImplementation(async () =>
       Response.json(
-        {
-          _tag: "VersionConflictError",
-          id: "post-1",
+        new VersionConflictError({
+          id: DocumentId.make("post-1"),
           expectedVersion: 1,
           actualVersion: 2,
-        },
+        }),
         { status: 409 },
       ),
     );
@@ -164,7 +172,10 @@ describe("createClient", () => {
       .catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(ForgeApiError);
-    expect((error as ForgeApiError).code).toBe("version conflict");
+    if (!(error instanceof ForgeApiError)) {
+      throw new Error("expected ForgeApiError");
+    }
+    expect(error.code).toBe("version conflict");
   });
 });
 

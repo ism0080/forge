@@ -1,12 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Predicate, Schema } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
+import type { HookHandler, Plugin } from "vite";
 import { forgePlugin } from "../src/index.js";
 
 const dirs: Array<string> = [];
 
-const writeConfig = (config: Record<string, unknown>): string => {
+const writeConfig = (config: Schema.Json): string => {
   const dir = mkdtempSync(join(tmpdir(), "forge-plugin-"));
   dirs.push(dir);
   const configPath = join(dir, "forge.json");
@@ -27,24 +29,49 @@ const baseConfig = {
   spa: true,
 };
 
-type ConfigHook = () => { readonly base?: string };
-type LoadHook = (
-  this: { readonly error: (message: string) => never },
-  id: string,
-) => string | null;
+type ForgePlugin = ReturnType<typeof forgePlugin>;
+type ConfigHook = HookHandler<NonNullable<Plugin["config"]>>;
+type LoadHook = HookHandler<NonNullable<Plugin["load"]>>;
 
-const pluginConfig = (plugin: ReturnType<typeof forgePlugin>): { readonly base?: string } =>
-  (plugin.config as unknown as ConfigHook)();
+const ForgeBaseConfigSchema = Schema.Struct({ base: Schema.optional(Schema.String) });
 
-const loadVirtual = (plugin: ReturnType<typeof forgePlugin>): string | null =>
-  (plugin.load as unknown as LoadHook).call(
+const hookContext = {
+  error: (message: string): never => {
+    throw new Error(message);
+  },
+};
+
+const pluginConfig = (plugin: ForgePlugin): { readonly base?: string | undefined } => {
+  const hook = plugin.config;
+  if (hook === undefined) {
+    throw new Error("forge plugin does not define a config hook");
+  }
+  const handler = "handler" in hook ? hook.handler : hook;
+  // SAFETY: the forge config hook only reads `this.error`, which hookContext supplies.
+  const result = handler.call(
+    hookContext as ThisParameterType<ConfigHook>,
+    {},
     {
-      error: (message) => {
-        throw new Error(message);
-      },
+      command: "build",
+      mode: "production",
     },
-    "\0virtual:forge",
   );
+  return Schema.decodeUnknownSync(ForgeBaseConfigSchema)(result);
+};
+
+const loadVirtual = (plugin: ForgePlugin): string | null => {
+  const hook = plugin.load;
+  if (hook === undefined) {
+    throw new Error("forge plugin does not define a load hook");
+  }
+  const handler = "handler" in hook ? hook.handler : hook;
+  // SAFETY: the forge load hook only reads `this.error`, which hookContext supplies.
+  const result = handler.call(hookContext as ThisParameterType<LoadHook>, "\0virtual:forge");
+  if (!Predicate.isString(result)) {
+    throw new Error("forge load hook did not return a module source");
+  }
+  return result;
+};
 
 describe("forgePlugin", () => {
   it("sets the Vite base to the site subpath", () => {

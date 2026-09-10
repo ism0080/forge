@@ -22,7 +22,12 @@ const applyTheme = (theme: Theme): void => {
   document.documentElement.classList.toggle("dark", theme === "dark");
 };
 
-export function useTheme(): { readonly theme: Theme; readonly toggle: () => void } {
+export interface UseThemeResult {
+  readonly theme: Theme;
+  readonly toggle: () => void;
+}
+
+export function useTheme(): UseThemeResult {
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme() ?? getSystemTheme());
 
   useEffect(() => {

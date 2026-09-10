@@ -1,8 +1,11 @@
 import { Effect } from "effect";
+import type { Mutable } from "effect/Types";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "@ism0080/forge-core/api";
 import { SchemaRowNotFoundError } from "@ism0080/forge-core";
+import type { SchemaListQuery } from "@ism0080/forge-core";
 import { SchemaService } from "../services/db/schema-service.js";
+import type { SchemaRowDeleteInput, SchemaRowUpdateInput } from "../services/db/schema-service.js";
 import { toInternalError } from "./errors.js";
 
 export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handlers) =>
@@ -21,18 +24,16 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
     .handle("schema.rows.list", ({ params, query }) =>
       Effect.gen(function* () {
         const schema = yield* SchemaService;
-        return yield* schema
-          .listRows(query.siteId, params.table, {
-            ...(query.limit !== undefined ? { limit: query.limit } : {}),
-            ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
-            ...(query.sortDir !== undefined ? { sortDir: query.sortDir } : {}),
-          })
-          .pipe(
-            Effect.catchTag("DbOperationError", toInternalError("schema")),
-            Effect.map(({ rows, nextCursor }) =>
-              nextCursor !== undefined ? { rows: [...rows], nextCursor } : { rows: [...rows] },
-            ),
-          );
+        const listQuery: Mutable<SchemaListQuery> = {};
+        if (query.limit !== undefined) listQuery.limit = query.limit;
+        if (query.cursor !== undefined) listQuery.cursor = query.cursor;
+        if (query.sortDir !== undefined) listQuery.sortDir = query.sortDir;
+        return yield* schema.listRows(query.siteId, params.table, listQuery).pipe(
+          Effect.catchTag("DbOperationError", toInternalError("schema")),
+          Effect.map(({ rows, nextCursor }) =>
+            nextCursor !== undefined ? { rows: [...rows], nextCursor } : { rows: [...rows] },
+          ),
+        );
       }),
     )
     .handle("schema.rows.get", ({ params, query }) =>
@@ -66,24 +67,23 @@ export const SchemaHandler = HttpApiBuilder.group(Api, "server.schema", (handler
     .handle("schema.rows.update", ({ params, payload }) =>
       Effect.gen(function* () {
         const schema = yield* SchemaService;
-        return yield* schema
-          .updateRow(payload.siteId, params.table, params.id, {
-            data: payload.data,
-            ...(typeof payload.expectedVersion === "number"
-              ? { expectedVersion: payload.expectedVersion }
-              : {}),
-          })
-          .pipe(
-            Effect.catchTag("DbOperationError", toInternalError("schema")),
-            Effect.map((row) => ({ row })),
-          );
+        const input: Mutable<SchemaRowUpdateInput> = {
+          data: payload.data,
+        };
+        if (payload.expectedVersion !== undefined) {
+          input.expectedVersion = payload.expectedVersion;
+        }
+        return yield* schema.updateRow(payload.siteId, params.table, params.id, input).pipe(
+          Effect.catchTag("DbOperationError", toInternalError("schema")),
+          Effect.map((row) => ({ row })),
+        );
       }),
     )
     .handle("schema.rows.delete", ({ params, query }) =>
       Effect.gen(function* () {
         const schema = yield* SchemaService;
-        const input: { expectedVersion?: number } = {};
-        if (typeof query.expectedVersion === "number") {
+        const input: Mutable<SchemaRowDeleteInput> = {};
+        if (query.expectedVersion !== undefined) {
           input.expectedVersion = query.expectedVersion;
         }
         return yield* schema.deleteRow(query.siteId, params.table, params.id, input).pipe(

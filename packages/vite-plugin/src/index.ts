@@ -62,12 +62,12 @@ export const forgePlugin = (options: ForgeVitePluginOptions = {}): Plugin => {
         return null;
       }
 
-      if (!config.apiBaseUrl || typeof config.apiBaseUrl !== "string") {
+      if (config.apiBaseUrl.length === 0) {
         this.error(`Missing or invalid "apiBaseUrl" in forge config at ${configPath}`);
         return null;
       }
 
-      if (!config.siteId || typeof config.siteId !== "string") {
+      if (config.siteId.length === 0) {
         this.error(`Missing or invalid "siteId" in forge config at ${configPath}`);
         return null;
       }

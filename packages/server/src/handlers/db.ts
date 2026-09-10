@@ -1,10 +1,12 @@
-import type { DbDeleteInput, DbDocumentData, DbListQuery } from "@ism0080/forge-core";
+import type { DbDeleteInput, DbListQuery, DbUpdateInput } from "@ism0080/forge-core";
 import { DbChangeEventSchema, SchemaRowChangeEventSchema } from "@ism0080/forge-core";
 import { Effect, Schema, Stream } from "effect";
+import type { Mutable } from "effect/Types";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "@ism0080/forge-core/api";
 import { DbEventsService } from "../services/db/events.js";
+import type { DbEventFilter } from "../services/db/events.js";
 import { DatabaseService } from "../services/db/service.js";
 import { toInternalError } from "./errors.js";
 
@@ -20,15 +22,17 @@ const buildListQuery = (query: {
   readonly search?: string | undefined;
   readonly sortBy?: "createdAt" | "updatedAt" | "id" | undefined;
   readonly sortDir?: "asc" | "desc" | undefined;
-}): DbListQuery => ({
-  ...(query.limit !== undefined ? { limit: query.limit } : {}),
-  ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
-  ...(query.whereField !== undefined ? { whereField: query.whereField } : {}),
-  ...(query.whereValue !== undefined ? { whereValue: query.whereValue } : {}),
-  ...(query.search !== undefined ? { search: query.search } : {}),
-  ...(query.sortBy !== undefined ? { sortBy: query.sortBy } : {}),
-  ...(query.sortDir !== undefined ? { sortDir: query.sortDir } : {}),
-});
+}): DbListQuery => {
+  const listQuery: Mutable<DbListQuery> = {};
+  if (query.limit !== undefined) listQuery.limit = query.limit;
+  if (query.cursor !== undefined) listQuery.cursor = query.cursor;
+  if (query.whereField !== undefined) listQuery.whereField = query.whereField;
+  if (query.whereValue !== undefined) listQuery.whereValue = query.whereValue;
+  if (query.search !== undefined) listQuery.search = query.search;
+  if (query.sortBy !== undefined) listQuery.sortBy = query.sortBy;
+  if (query.sortDir !== undefined) listQuery.sortDir = query.sortDir;
+  return listQuery;
+};
 
 export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
   handlers
@@ -39,22 +43,24 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         const write = yield* socket.writer;
         const encoder = new TextEncoder();
 
-        const eventStream = events
-          .stream({
-            siteId: query.siteId,
-            ...(query.collection !== undefined ? { collection: query.collection } : {}),
-            ...(query.table !== undefined ? { table: query.table } : {}),
-          })
-          .pipe(
-            Stream.map((event) => encoder.encode(Schema.encodeSync(ForgeDbEventFromJson)(event))),
-            Stream.mapEffect((chunk) =>
-              write(chunk).pipe(
-                Effect.tapError((cause) => Effect.logError("socket write failed", cause)),
-                Effect.orDie,
-              ),
+        const filter: Mutable<DbEventFilter> = { siteId: query.siteId };
+        if (query.collection !== undefined) {
+          filter.collection = query.collection;
+        }
+        if (query.table !== undefined) {
+          filter.table = query.table;
+        }
+
+        const eventStream = events.stream(filter).pipe(
+          Stream.map((event) => encoder.encode(Schema.encodeSync(ForgeDbEventFromJson)(event))),
+          Stream.mapEffect((chunk) =>
+            write(chunk).pipe(
+              Effect.tapError((cause) => Effect.logError("socket write failed", cause)),
+              Effect.orDie,
             ),
-            Stream.runDrain,
-          );
+          ),
+          Stream.runDrain,
+        );
 
         yield* Effect.forkScoped(eventStream).pipe(Effect.orDie);
 
@@ -90,9 +96,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
     .handle("db.documents.create", ({ params, payload }) =>
       Effect.gen(function* () {
         const database = yield* DatabaseService;
-        const input = payload.id
-          ? { data: payload.data as DbDocumentData, id: payload.id }
-          : { data: payload.data as DbDocumentData };
+        const input = payload.id ? { data: payload.data, id: payload.id } : { data: payload.data };
         return yield* database.createDocument(payload.siteId, params.collection, input).pipe(
           Effect.catchTag("DbOperationError", toInternalError("database")),
           Effect.map((document) => ({ document })),
@@ -102,12 +106,10 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
     .handle("db.documents.update", ({ params, payload }) =>
       Effect.gen(function* () {
         const database = yield* DatabaseService;
-        const input = {
-          data: payload.data as DbDocumentData,
-          ...(typeof payload.expectedVersion === "number"
-            ? { expectedVersion: payload.expectedVersion }
-            : {}),
-        };
+        const input: Mutable<DbUpdateInput> = { data: payload.data };
+        if (payload.expectedVersion !== undefined) {
+          input.expectedVersion = payload.expectedVersion;
+        }
         return yield* database
           .updateDocument(payload.siteId, params.collection, params.id, input)
           .pipe(
@@ -120,7 +122,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
       Effect.gen(function* () {
         const database = yield* DatabaseService;
         const input: DbDeleteInput =
-          typeof query.expectedVersion === "number" && Number.isFinite(query.expectedVersion)
+          query.expectedVersion !== undefined && Number.isFinite(query.expectedVersion)
             ? { expectedVersion: query.expectedVersion }
             : {};
         return yield* database

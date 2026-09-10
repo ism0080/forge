@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Config, Context, Data, Effect, Layer, Schema, Scope } from "effect";
+import { Config, Context, Data, Effect, Layer, Predicate, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -8,6 +8,7 @@ import {
   SchemaInvalidInputError,
   SchemaMigrationError,
   SchemaRowConflictError,
+  type SchemaRowData,
   SchemaRowNotFoundError,
   SiteId,
 } from "@ism0080/forge-core";
@@ -42,10 +43,12 @@ const INSERT_MIGRATION_SQL =
 
 type SqliteValue = string | number | bigint | Uint8Array | null;
 
-interface StoredMigration {
-  readonly id: string;
-  readonly hash: string;
-}
+const StoredMigrationsSchema = Schema.Array(
+  Schema.Struct({
+    id: Schema.String,
+    hash: Schema.String,
+  }),
+);
 
 type RowWriteOutcome = Data.TaggedEnum<{
   missing: {};
@@ -95,6 +98,15 @@ export type SchemaRowError =
   | SchemaRowConflictError
   | DbOperationError;
 
+export interface SchemaRowUpdateInput {
+  readonly data: SchemaRowData;
+  readonly expectedVersion?: number | undefined;
+}
+
+export interface SchemaRowDeleteInput {
+  readonly expectedVersion?: number | undefined;
+}
+
 export interface SchemaApi {
   readonly applyMigrations: (
     siteId: SiteId,
@@ -105,10 +117,7 @@ export interface SchemaApi {
     siteId: SiteId,
     table: string,
     id: string,
-  ) => Effect.Effect<
-    Record<string, unknown> | undefined,
-    SchemaInvalidInputError | DbOperationError
-  >;
+  ) => Effect.Effect<SchemaRowData | undefined, SchemaInvalidInputError | DbOperationError>;
   readonly listRows: (
     siteId: SiteId,
     table: string,
@@ -118,28 +127,25 @@ export interface SchemaApi {
       readonly sortDir?: "asc" | "desc" | undefined;
     },
   ) => Effect.Effect<
-    { rows: ReadonlyArray<Record<string, unknown>>; nextCursor?: string },
+    { rows: ReadonlyArray<SchemaRowData>; nextCursor?: string },
     SchemaInvalidInputError | DbOperationError
   >;
   readonly insertRow: (
     siteId: SiteId,
     table: string,
-    data: Record<string, unknown>,
-  ) => Effect.Effect<Record<string, unknown>, SchemaRowError>;
+    data: SchemaRowData,
+  ) => Effect.Effect<SchemaRowData, SchemaRowError>;
   readonly updateRow: (
     siteId: SiteId,
     table: string,
     id: string,
-    input: {
-      readonly data: Record<string, unknown>;
-      readonly expectedVersion?: number | undefined;
-    },
-  ) => Effect.Effect<Record<string, unknown>, SchemaRowError>;
+    input: SchemaRowUpdateInput,
+  ) => Effect.Effect<SchemaRowData, SchemaRowError>;
   readonly deleteRow: (
     siteId: SiteId,
     table: string,
     id: string,
-    input?: { readonly expectedVersion?: number | undefined },
+    input?: SchemaRowDeleteInput,
   ) => Effect.Effect<void, SchemaRowError>;
 }
 
@@ -194,7 +200,10 @@ const ListCursorFromJson = Schema.fromJsonString(
   }),
 );
 
-const makeListCursor = (created: unknown, id: unknown): string | undefined => {
+const makeListCursor = (
+  created: SqliteValue | undefined,
+  id: SqliteValue | undefined,
+): string | undefined => {
   if (created === undefined || created === null || id === undefined || id === null) {
     return undefined;
   }
@@ -234,22 +243,21 @@ const validateColumnIdentifier = (column: string): void => {
   }
 };
 
-const toSqliteValue = (column: string, value: unknown): SqliteValue => {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "bigint" ||
-    value instanceof Uint8Array
-  ) {
-    return value;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  throw new SchemaInvalidInputError({
-    message: `column "${column}" must be a SQLite string, number, bigint, byte array, or null`,
-  });
-};
+const SqliteColumnValueSchema = Schema.Union([
+  Schema.Null,
+  Schema.String,
+  Schema.BigInt,
+  Schema.Uint8Array,
+  Schema.Finite,
+]);
+
+const INVALID_SQLITE_VALUE_MESSAGE = (column: string): string =>
+  `column "${column}" must be a SQLite string, number, bigint, byte array, or null`;
+
+const toSchemaInvalidInputError = (cause: unknown): SchemaInvalidInputError =>
+  cause instanceof SchemaInvalidInputError
+    ? cause
+    : new SchemaInvalidInputError({ message: String(cause) });
 
 const make = Effect.gen(function* () {
   const config = yield* SchemaConfigService;
@@ -283,7 +291,7 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* Effect.try({
         try: () => validateTableIdentifier(table),
-        catch: (error) => error as SchemaInvalidInputError,
+        catch: toSchemaInvalidInputError,
       });
       const rows = yield* runSync("inspectTable", () =>
         site.db.prepare(`PRAGMA table_info(${quoteIdentifier(table)})`).all(),
@@ -291,9 +299,7 @@ const make = Effect.gen(function* () {
       if (rows.length === 0) {
         return yield* new SchemaInvalidInputError({ message: `unknown table "${table}"` });
       }
-      const columns = new Set(
-        rows.map((row) => row.name).filter((name): name is string => typeof name === "string"),
-      );
+      const columns = new Set(rows.map((row) => row.name).filter(Predicate.isString));
       if (!columns.has("id") || !columns.has("version")) {
         return yield* new SchemaInvalidInputError({
           message: `table "${table}" must have id and version columns for row CRUD`,
@@ -304,7 +310,7 @@ const make = Effect.gen(function* () {
 
   const validateDataColumns = (
     columns: ReadonlySet<string>,
-    data: Record<string, unknown>,
+    data: SchemaRowData,
   ): ReadonlyArray<string> => {
     const names = Object.keys(data);
     for (const name of names) {
@@ -319,15 +325,11 @@ const make = Effect.gen(function* () {
     return names;
   };
 
-  const selectRow = (
-    site: SiteDb,
-    table: string,
-    id: string,
-  ): Record<string, unknown> | undefined =>
+  const selectRow = (site: SiteDb, table: string, id: string): SchemaRowData | undefined =>
     prepareStatement(
       site,
       `SELECT * FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier("id")} = ?`,
-    ).get(id) as Record<string, unknown> | undefined;
+    ).get(id);
 
   const applyMigrations = Effect.fn("Schema.applyMigrations")(
     (
@@ -375,10 +377,9 @@ const make = Effect.gen(function* () {
         const result = yield* Effect.try({
           try: () =>
             runInTransaction(site, () => {
-              const stored = prepareStatement(
-                site,
-                SELECT_MIGRATIONS_SQL,
-              ).all() as unknown as StoredMigration[];
+              const stored = Schema.decodeUnknownSync(StoredMigrationsSchema)(
+                prepareStatement(site, SELECT_MIGRATIONS_SQL).all(),
+              );
               const submitted = migrations.map((migration) => ({
                 ...migration,
                 hash: createHash("sha256").update(migration.sql).digest("hex"),
@@ -446,10 +447,7 @@ const make = Effect.gen(function* () {
       siteId: SiteId,
       table: string,
       id: string,
-    ): Effect.Effect<
-      Record<string, unknown> | undefined,
-      SchemaInvalidInputError | DbOperationError
-    > =>
+    ): Effect.Effect<SchemaRowData | undefined, SchemaInvalidInputError | DbOperationError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
         yield* getTableColumns(site, table);
@@ -467,7 +465,7 @@ const make = Effect.gen(function* () {
         readonly sortDir?: "asc" | "desc" | undefined;
       },
     ): Effect.Effect<
-      { rows: ReadonlyArray<Record<string, unknown>>; nextCursor?: string },
+      { rows: ReadonlyArray<SchemaRowData>; nextCursor?: string },
       SchemaInvalidInputError | DbOperationError
     > =>
       Effect.gen(function* () {
@@ -495,12 +493,8 @@ const make = Effect.gen(function* () {
           ORDER BY ${quoteIdentifier(createdColumn)} ${sortDir}, ${quoteIdentifier("id")} ${sortDir}
           LIMIT ?`;
 
-        const rows = yield* runSync(
-          "listRows",
-          () =>
-            prepareStatement(site, sql).all(...keyset.params, limit + 1) as ReadonlyArray<
-              Record<string, unknown>
-            >,
+        const rows = yield* runSync("listRows", () =>
+          prepareStatement(site, sql).all(...keyset.params, limit + 1),
         );
 
         const hasMore = rows.length > limit;
@@ -517,26 +511,29 @@ const make = Effect.gen(function* () {
     (
       siteId: SiteId,
       table: string,
-      data: Record<string, unknown>,
-    ): Effect.Effect<Record<string, unknown>, SchemaRowError> =>
+      data: SchemaRowData,
+    ): Effect.Effect<SchemaRowData, SchemaRowError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
         const columns = yield* getTableColumns(site, table);
         const dataColumns = yield* Effect.try({
           try: () => validateDataColumns(columns, data),
-          catch: (error) => error as SchemaInvalidInputError,
+          catch: toSchemaInvalidInputError,
         });
         const id = DocumentId.make(yield* randomId);
         const createdAt = yield* clock.currentTimeMs;
-        const values: Record<string, SqliteValue> = { id, version: 1 };
+        const values: Record<string, SqliteValue> = {};
+        values.id = id;
+        values.version = 1;
         if (columns.has("created_at")) values.created_at = createdAt;
         else if (columns.has("createdAt")) values.createdAt = createdAt;
         if (columns.has("updated_at")) values.updated_at = createdAt;
         else if (columns.has("updatedAt")) values.updatedAt = createdAt;
         for (const column of dataColumns) {
           values[column] = yield* Effect.try({
-            try: () => toSqliteValue(column, data[column]),
-            catch: (error) => error as SchemaInvalidInputError,
+            try: () => Schema.decodeUnknownSync(SqliteColumnValueSchema)(data[column]),
+            catch: () =>
+              new SchemaInvalidInputError({ message: INVALID_SQLITE_VALUE_MESSAGE(column) }),
           });
         }
         const insertColumns = Object.keys(values);
@@ -565,35 +562,30 @@ const make = Effect.gen(function* () {
       siteId: SiteId,
       table: string,
       id: string,
-      input: {
-        readonly data: Record<string, unknown>;
-        readonly expectedVersion?: number | undefined;
-      },
-    ): Effect.Effect<Record<string, unknown>, SchemaRowError> =>
+      input: SchemaRowUpdateInput,
+    ): Effect.Effect<SchemaRowData, SchemaRowError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
         const columns = yield* getTableColumns(site, table);
         const dataColumns = yield* Effect.try({
           try: () => validateDataColumns(columns, input.data),
-          catch: (error) => error as SchemaInvalidInputError,
+          catch: toSchemaInvalidInputError,
         });
         const updatedAt = yield* clock.currentTimeMs;
         const values = yield* Effect.forEach(dataColumns, (column) =>
           Effect.try({
-            try: () => toSqliteValue(column, input.data[column]),
-            catch: (error) => error as SchemaInvalidInputError,
+            try: () => Schema.decodeUnknownSync(SqliteColumnValueSchema)(input.data[column]),
+            catch: () =>
+              new SchemaInvalidInputError({ message: INVALID_SQLITE_VALUE_MESSAGE(column) }),
           }),
         );
         const outcome = yield* runSync("updateRow", () =>
           runInTransaction(site, () => {
             const existing = selectRow(site, table, id);
             if (existing === undefined) return rowWriteMissing();
-            if (
-              typeof input.expectedVersion === "number" &&
-              existing.version !== input.expectedVersion
-            ) {
+            if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
               return rowWriteConflict({
-                actualVersion: typeof existing.version === "number" ? existing.version : Number.NaN,
+                actualVersion: Predicate.isNumber(existing.version) ? existing.version : Number.NaN,
               });
             }
             const sets = dataColumns.map((column) => `${quoteIdentifier(column)} = ?`);
@@ -651,7 +643,7 @@ const make = Effect.gen(function* () {
       siteId: SiteId,
       table: string,
       id: string,
-      input?: { readonly expectedVersion?: number | undefined },
+      input?: SchemaRowDeleteInput,
     ): Effect.Effect<void, SchemaRowError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
@@ -661,11 +653,11 @@ const make = Effect.gen(function* () {
             const existing = selectRow(site, table, id);
             if (existing === undefined) return rowDeleteMissing();
             if (
-              typeof input?.expectedVersion === "number" &&
+              input?.expectedVersion !== undefined &&
               existing.version !== input.expectedVersion
             ) {
               return rowDeleteConflict({
-                actualVersion: typeof existing.version === "number" ? existing.version : Number.NaN,
+                actualVersion: Predicate.isNumber(existing.version) ? existing.version : Number.NaN,
               });
             }
             prepareStatement(

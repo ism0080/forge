@@ -46,7 +46,7 @@ export const randomId: Effect.Effect<string> = Effect.gen(function* () {
 
 export const parseLimit = (query?: { readonly limit?: number | undefined }): number => {
   const raw = query?.limit;
-  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+  if (raw === undefined || !Number.isFinite(raw)) {
     return 50;
   }
   const floored = Math.floor(raw);

@@ -1,7 +1,9 @@
 import { Effect } from "effect";
+import type { Mutable } from "effect/Types";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { Api } from "@ism0080/forge-core/api";
 import { JobsService } from "../services/jobs/service.js";
+import type { JobCreateInput, JobUpdateInput } from "../services/jobs/service.js";
 import { toInternalError } from "./errors.js";
 
 export const JobsHandler = HttpApiBuilder.group(Api, "server.jobs", (handlers) =>
@@ -27,13 +29,14 @@ export const JobsHandler = HttpApiBuilder.group(Api, "server.jobs", (handlers) =
     .handle("jobs.create", ({ payload }) =>
       Effect.gen(function* () {
         const jobs = yield* JobsService;
+        const input: Mutable<JobCreateInput> = {
+          name: payload.name,
+          schedule: payload.schedule,
+        };
+        if (payload.payload !== undefined) input.payload = payload.payload;
+        if (payload.enabled !== undefined) input.enabled = payload.enabled;
         return yield* jobs
-          .createJob(payload.siteId, {
-            name: payload.name,
-            schedule: payload.schedule,
-            ...(payload.payload !== undefined ? { payload: payload.payload } : {}),
-            ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
-          })
+          .createJob(payload.siteId, input)
           .pipe(
             Effect.catchTag("DbOperationError", toInternalError("jobs")),
             Effect.map((job) => ({ job })),
@@ -43,16 +46,16 @@ export const JobsHandler = HttpApiBuilder.group(Api, "server.jobs", (handlers) =
     .handle("jobs.update", ({ params, payload }) =>
       Effect.gen(function* () {
         const jobs = yield* JobsService;
+        const input: Mutable<JobUpdateInput> = {};
+        if (payload.name !== undefined) input.name = payload.name;
+        if (payload.schedule !== undefined) input.schedule = payload.schedule;
+        if (payload.payload !== undefined) input.payload = payload.payload;
+        if (payload.enabled !== undefined) input.enabled = payload.enabled;
+        if (payload.expectedVersion !== undefined) {
+          input.expectedVersion = payload.expectedVersion;
+        }
         return yield* jobs
-          .updateJob(payload.siteId, params.id, {
-            ...(payload.name !== undefined ? { name: payload.name } : {}),
-            ...(payload.schedule !== undefined ? { schedule: payload.schedule } : {}),
-            ...(payload.payload !== undefined ? { payload: payload.payload } : {}),
-            ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
-            ...(payload.expectedVersion !== undefined
-              ? { expectedVersion: payload.expectedVersion }
-              : {}),
-          })
+          .updateJob(payload.siteId, params.id, input)
           .pipe(
             Effect.catchTag("DbOperationError", toInternalError("jobs")),
             Effect.map((job) => ({ job })),

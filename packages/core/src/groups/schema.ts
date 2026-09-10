@@ -5,13 +5,14 @@ import {
   SchemaListResponseSchema,
   SchemaMigrationError,
   SchemaRowConflictError,
+  SchemaRowDataSchema,
   SchemaRowNotFoundError,
   SiteId,
 } from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
-const RowSchema = Schema.Record(Schema.String, Schema.Unknown);
+const RowSchema = SchemaRowDataSchema;
 
 const RowResponseSchema = Schema.Struct({
   row: RowSchema,

@@ -14,11 +14,12 @@ import {
   SiteId,
   type ForgeConfig,
 } from "@ism0080/forge-core";
-import { createClient } from "@ism0080/forge-sdk";
+import { createClient, type ForgeClientOptions } from "@ism0080/forge-sdk";
 import { getTemplate, templates, type Template } from "@ism0080/forge-templates";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { Mutable } from "effect/Types";
 import * as Config from "effect/Config";
 import * as Command from "effect/unstable/cli/Command";
 import * as Argument from "effect/unstable/cli/Argument";
@@ -27,14 +28,16 @@ import * as Flag from "effect/unstable/cli/Flag";
 const cwd = process.cwd();
 const configPath = `${cwd}/forge.json`;
 
-const { version: CLI_VERSION } = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as { version: string };
+const SiteSpaConfigFromJson = Schema.fromJsonString(Schema.Struct({ spa: Schema.Boolean }));
+
+const { version: CLI_VERSION } = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
+)(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 const cliError =
   (message: string) =>
-  (error: unknown): CliError =>
-    new CliError({ message, cause: error });
+  (cause: unknown): CliError =>
+    new CliError({ message, cause });
 
 const readConfig = () =>
   Effect.gen(function* () {
@@ -74,11 +77,13 @@ const apiBaseUrlConfig = Config.string("FORGE_API_BASE_URL").pipe(
 
 const makeClient = (options: { apiBaseUrl: string; siteId?: string }) =>
   Effect.try({
-    try: () =>
-      createClient({
+    try: () => {
+      const clientOptions: Mutable<ForgeClientOptions> = {
         baseUrl: options.apiBaseUrl,
-        ...(options.siteId ? { siteId: options.siteId } : {}),
-      }),
+      };
+      if (options.siteId) clientOptions.siteId = options.siteId;
+      return createClient(clientOptions);
+    },
     catch: cliError("Unable to create forge client"),
   });
 
@@ -177,15 +182,19 @@ const init = Command.make(
     }
 
     const templateConfig = templateDefinition.config ?? {};
-    const config: ForgeConfig = {
+    const config: Mutable<ForgeConfig> = {
       siteId: SiteId.make(resolvedSiteId),
       entry: templateConfig.entry ?? ".",
       apiBaseUrl,
       spa: templateConfig.spa ?? true,
-      ...(templateConfig.database !== undefined ? { database: templateConfig.database } : {}),
     };
+    if (templateConfig.database !== undefined) {
+      config.database = templateConfig.database;
+    }
 
     yield* fs
+      // Allowed here to pretty format the config file for user readability
+      // oxlint-disable-next-line forge/no-global-json
       .writeFileString(configPath, `${JSON.stringify(config, null, 2)}\n`)
       .pipe(Effect.mapError(cliError("Unable to write forge.json")));
 
@@ -240,7 +249,7 @@ const deploy = Command.make(
       yield* Effect.log(`uploaded ${rel}`);
     }
 
-    const siteConfig = JSON.stringify({ spa: config.spa ?? true });
+    const siteConfig = Schema.encodeSync(SiteSpaConfigFromJson)({ spa: config.spa ?? true });
     yield* Effect.tryPromise({
       try: () =>
         client.upload({

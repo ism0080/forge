@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Layer, Match, Schema, Scope } from "effect";
+import { Config, Context, Data, Effect, Layer, Match, Predicate, Schema, Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -51,14 +51,18 @@ const SqliteDatabaseConfigLayer = Layer.effect(
   }),
 );
 
-interface DocumentRow {
-  readonly collection: string;
-  readonly id: string;
-  readonly data: string;
-  readonly version: number;
-  readonly created_at: string;
-  readonly updated_at: string;
-}
+const DocumentRowSchema = Schema.Struct({
+  collection: Schema.String,
+  id: Schema.String,
+  data: Schema.String,
+  version: Schema.Number,
+  created_at: Schema.String,
+  updated_at: Schema.String,
+});
+
+type DocumentRow = Schema.Schema.Type<typeof DocumentRowSchema>;
+
+const DocumentRowsSchema = Schema.Array(DocumentRowSchema);
 
 type DocumentWriteOutcome = Data.TaggedEnum<{
   missing: {};
@@ -178,10 +182,12 @@ const sortColumn = Match.type<DbSortBy>().pipe(
   Match.exhaustive,
 );
 
-const buildFilterClause = (
-  whereField: string,
-  whereValue: string,
-): { sql: string; params: Array<string | number> } => {
+interface SqlClause {
+  readonly sql: string;
+  readonly params: Array<string | number>;
+}
+
+const buildFilterClause = (whereField: string, whereValue: string): SqlClause => {
   const jsonPath = `$.${whereField}`;
   return {
     sql: `AND (
@@ -198,7 +204,7 @@ const buildKeysetClause = (
   sortDir: DbSortDir,
   cursor: Cursor,
   cursorKey: string,
-): { sql: string; params: Array<string | number> } => {
+): SqlClause => {
   const comparator = sortDir === "asc" ? ">" : "<";
   if (sortBy === "id") {
     return { sql: `AND id ${comparator} ?`, params: [cursor.id] };
@@ -218,10 +224,7 @@ const toFtsMatch = (search: string): string | undefined => {
   return terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" ");
 };
 
-const buildSearchClause = (
-  collection: CollectionId,
-  search: string,
-): { sql: string; params: Array<string> } | undefined => {
+const buildSearchClause = (collection: CollectionId, search: string): SqlClause | undefined => {
   const match = toFtsMatch(search);
   if (match === undefined) {
     return undefined;
@@ -344,14 +347,15 @@ const make = Effect.gen(function* () {
     ): Effect.Effect<DbDocument, DocumentNotFoundError | DbOperationError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
-        const row = yield* runSync("getDocument", () =>
-          statement(
+        const row = yield* runSync("getDocument", () => {
+          const raw = statement(
             site,
             `SELECT collection, id, data, version, created_at, updated_at
              FROM documents
              WHERE collection = ? AND id = ?`,
-          ).get(collection, id),
-        ) as Effect.Effect<DocumentRow | undefined, DbOperationError>;
+          ).get(collection, id);
+          return raw === undefined ? undefined : Schema.decodeUnknownSync(DocumentRowSchema)(raw);
+        });
         if (row === undefined) {
           return yield* new DocumentNotFoundError({ siteId, collection, id });
         }
@@ -371,19 +375,18 @@ const make = Effect.gen(function* () {
         const updatedAt = yield* clock.currentTimeIso;
         const outcome = yield* runSync("updateDocument", () =>
           runInTransaction(site, () => {
-            const row = statement(
+            const raw = statement(
               site,
               `SELECT collection, id, data, version, created_at, updated_at
                FROM documents
                WHERE collection = ? AND id = ?`,
-            ).get(collection, id) as DocumentRow | undefined;
+            ).get(collection, id);
+            const row =
+              raw === undefined ? undefined : Schema.decodeUnknownSync(DocumentRowSchema)(raw);
             if (row === undefined) {
               return documentMissing();
             }
-            if (
-              typeof input.expectedVersion === "number" &&
-              row.version !== input.expectedVersion
-            ) {
+            if (input.expectedVersion !== undefined && row.version !== input.expectedVersion) {
               return documentConflict({ actualVersion: row.version });
             }
             statement(
@@ -444,19 +447,18 @@ const make = Effect.gen(function* () {
         const site = yield* openSite(siteId);
         const outcome = yield* runSync("deleteDocument", () =>
           runInTransaction(site, () => {
-            const row = statement(
+            const raw = statement(
               site,
               `SELECT collection, id, data, version, created_at, updated_at
                FROM documents
                WHERE collection = ? AND id = ?`,
-            ).get(collection, id) as DocumentRow | undefined;
+            ).get(collection, id);
+            const row =
+              raw === undefined ? undefined : Schema.decodeUnknownSync(DocumentRowSchema)(raw);
             if (row === undefined) {
               return documentDeleteMissing();
             }
-            if (
-              typeof input?.expectedVersion === "number" &&
-              row.version !== input.expectedVersion
-            ) {
+            if (input?.expectedVersion !== undefined && row.version !== input.expectedVersion) {
               return documentDeleteConflict({ actualVersion: row.version });
             }
             statement(site, "DELETE FROM documents WHERE collection = ? AND id = ?").run(
@@ -512,14 +514,15 @@ const make = Effect.gen(function* () {
       if (sortBy === "createdAt") {
         return { cursor, cursorKey: cursor.createdAt };
       }
-      const row = (yield* runSync("listDocuments", () =>
+      const row = yield* runSync("listDocuments", () =>
         statement(
           site,
           "SELECT updated_at FROM documents WHERE collection = ? AND id = ? AND created_at = ?",
         ).get(collection, cursor.id, cursor.createdAt),
-      )) as { updated_at?: string } | undefined;
-      return row?.updated_at !== undefined
-        ? { cursor, cursorKey: row.updated_at }
+      );
+      const updatedAt = row?.["updated_at"];
+      return Predicate.isString(updatedAt)
+        ? { cursor, cursorKey: updatedAt }
         : { cursor: undefined, cursorKey: undefined };
     });
 
@@ -547,10 +550,10 @@ const make = Effect.gen(function* () {
           return { documents: [] };
         }
 
-        const keyset =
+        const keyset: SqlClause =
           cursor !== undefined && cursorKey !== undefined
             ? buildKeysetClause(sortBy, column, sortDir, cursor, cursorKey)
-            : { sql: "", params: [] as Array<string | number> };
+            : { sql: "", params: [] };
         const filter =
           whereField !== undefined ? buildFilterClause(whereField, whereValue) : undefined;
         const search =
@@ -568,16 +571,16 @@ const make = Effect.gen(function* () {
           LIMIT ?
         `;
 
-        const rows = yield* runSync(
-          "listDocuments",
-          () =>
+        const rows = yield* runSync("listDocuments", () =>
+          Schema.decodeUnknownSync(DocumentRowsSchema)(
             statement(site, sql).all(
               collection,
               ...keyset.params,
               ...(filter?.params ?? []),
               ...(search?.params ?? []),
               limit + 1,
-            ) as unknown as DocumentRow[],
+            ),
+          ),
         );
 
         const hasMore = rows.length > limit;

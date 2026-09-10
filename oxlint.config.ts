@@ -16,7 +16,7 @@ export default defineConfig({
   },
   rules: {
     complexity: "error",
-    // ...profiles.core,
+    ...profiles.core,
   },
   overrides: [
     {
@@ -26,7 +26,7 @@ export default defineConfig({
       },
     },
     {
-      files: ["packages/core/**/*.ts", "packages/server/**/*.ts"],
+      files: ["packages/core/**/*.ts", "packages/server/**/*.ts", "packages/cli/**/*.ts", "packages/sdk/**/*.ts"],
       rules: profiles.effect,
     },
   ],

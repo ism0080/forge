@@ -84,6 +84,9 @@ export type UploadResponse = Schema.Schema.Type<typeof UploadResponseSchema>;
 export const DbDocumentDataSchema = Schema.Record(Schema.String, Schema.Unknown);
 export type DbDocumentData = Schema.Schema.Type<typeof DbDocumentDataSchema>;
 
+export const SchemaRowDataSchema = Schema.Record(Schema.String, Schema.Unknown);
+export type SchemaRowData = Schema.Schema.Type<typeof SchemaRowDataSchema>;
+
 export const DbDocumentSchema = Schema.Struct({
   id: DocumentId,
   siteId: SiteId,

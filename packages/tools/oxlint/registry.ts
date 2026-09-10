@@ -63,6 +63,9 @@ const defineRuleRegistry = <
 ): Readonly<Registry> => Object.freeze(registry);
 
 export const ruleDefinitions = defineRuleRegistry({
+  //
+  // Core
+  //
   "no-array-filter-map": {
     rule: noArrayFilterMapRule,
     profile: "core",
@@ -148,6 +151,9 @@ export const ruleDefinitions = defineRuleRegistry({
     profile: "core",
     severity: "error",
   },
+  //
+  // Effect
+  //
   "no-ambient-nondeterminism": {
     rule: noAmbientNondeterminismRule,
     profile: "effect",
@@ -244,11 +250,32 @@ export const ruleDefinitions = defineRuleRegistry({
     profile: "effect",
     severity: "error",
   },
+  "no-manual-effect-error-tag": {
+    rule: noManualEffectErrorTagRule,
+    profile: "effect",
+    severity: "error",
+  },
+  "no-manual-tag-comparison": {
+    rule: noManualTagComparisonRule,
+    profile: "effect",
+    severity: "error",
+  },
+  "no-manual-tagged-construction": {
+    rule: noManualTaggedConstructionRule,
+    profile: "effect",
+    severity: "error",
+  },
+  //
+  // React
+  //
   "no-fixed-height-on-content": {
     rule: noFixedHeightOnContentRule,
     profile: "react",
     severity: "error",
   },
+  //
+  // XState
+  //
   "no-direct-xstate-create-machine": {
     rule: noDirectXstateCreateMachineRule,
     profile: "xstate",
@@ -282,21 +309,6 @@ export const ruleDefinitions = defineRuleRegistry({
   "require-xstate-event-satisfies": {
     rule: requireXstateEventSatisfiesRule,
     profile: "xstate",
-    severity: "error",
-  },
-  "no-manual-effect-error-tag": {
-    rule: noManualEffectErrorTagRule,
-    profile: "effect",
-    severity: "error",
-  },
-  "no-manual-tag-comparison": {
-    rule: noManualTagComparisonRule,
-    profile: "effect",
-    severity: "error",
-  },
-  "no-manual-tagged-construction": {
-    rule: noManualTaggedConstructionRule,
-    profile: "effect",
     severity: "error",
   },
 });

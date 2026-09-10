@@ -45,7 +45,7 @@ describe("templates", () => {
       const pkg = template.files.find((file) => file.path === "package.json");
       expect(pkg, "template must declare a package.json").toBeDefined();
 
-      const parsed = JSON.parse(pkg!.content) as { name?: unknown };
+      const parsed: { name?: unknown } = JSON.parse(pkg!.content);
       expect(parsed.name).toBeTypeOf("string");
     },
   );

@@ -37,12 +37,12 @@ const StorageMetadataFromJson = Schema.fromJsonString(
 
 const toStorageError =
   (operation: string, bucket: string, key: string) =>
-  (error: unknown): StorageError =>
+  (cause: unknown): StorageError =>
     new StorageError({
       operation,
       bucket,
       key,
-      cause: error,
+      cause,
     });
 
 const make = Effect.gen(function* () {

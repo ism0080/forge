@@ -1,4 +1,5 @@
 import { Config, Context, Effect, Layer, Schema, Scope } from "effect";
+import type { Mutable } from "effect/Types";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import {
@@ -23,7 +24,11 @@ const JobPayloadFromJson = Schema.fromJsonString(Schema.Json);
 
 export { JobConflictError, JobInvalidInputError, JobNotFoundError };
 
-export type JobError = JobNotFoundError | JobConflictError | JobInvalidInputError | DbOperationError;
+export type JobError =
+  | JobNotFoundError
+  | JobConflictError
+  | JobInvalidInputError
+  | DbOperationError;
 
 export interface JobCreateInput {
   readonly name: string;
@@ -41,7 +46,9 @@ export interface JobUpdateInput {
 }
 
 export interface JobsApi {
-  readonly listJobs: (siteId: SiteId) => Effect.Effect<ReadonlyArray<JobDefinition>, DbOperationError>;
+  readonly listJobs: (
+    siteId: SiteId,
+  ) => Effect.Effect<ReadonlyArray<JobDefinition>, DbOperationError>;
   readonly getJob: (
     siteId: SiteId,
     id: DocumentId,
@@ -60,10 +67,7 @@ export interface JobsApi {
     id: DocumentId,
     expectedVersion?: number,
   ) => Effect.Effect<void, JobError>;
-  readonly runJob: (
-    siteId: SiteId,
-    id: DocumentId,
-  ) => Effect.Effect<JobDefinition, JobError>;
+  readonly runJob: (siteId: SiteId, id: DocumentId) => Effect.Effect<JobDefinition, JobError>;
   readonly runDue: (nowMs: number) => Effect.Effect<number, DbOperationError>;
 }
 
@@ -85,21 +89,44 @@ const JobsConfigLayer = Layer.effect(
   }),
 );
 
-interface JobRow {
-  readonly id: string;
-  readonly site_id: string;
-  readonly name: string;
-  readonly schedule: string;
-  readonly payload: string | null;
-  readonly enabled: number;
-  readonly next_run_at: number;
-  readonly last_run_at: number | null;
-  readonly last_status: string | null;
-  readonly last_error: string | null;
-  readonly run_count: number;
-  readonly version: number;
-  readonly created_at: string;
-  readonly updated_at: string;
+const JobRowSchema = Schema.Struct({
+  id: Schema.String,
+  site_id: Schema.String,
+  name: Schema.String,
+  schedule: Schema.String,
+  payload: Schema.NullOr(Schema.String),
+  enabled: Schema.Number,
+  next_run_at: Schema.Number,
+  last_run_at: Schema.NullOr(Schema.Number),
+  last_status: Schema.NullOr(Schema.String),
+  last_error: Schema.NullOr(Schema.String),
+  run_count: Schema.Number,
+  version: Schema.Number,
+  created_at: Schema.String,
+  updated_at: Schema.String,
+});
+
+type JobRow = Schema.Schema.Type<typeof JobRowSchema>;
+
+const JobRowsSchema = Schema.Array(JobRowSchema);
+
+const JobIdRowSchema = Schema.Struct({ id: Schema.String });
+
+interface JobDefinitionInput {
+  id: string;
+  siteId: string;
+  name: string;
+  schedule: string;
+  payload?: JobPayload;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunAt?: string;
+  lastStatus?: string;
+  lastError?: string;
+  runCount: number;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const CREATE_JOBS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS _forge_jobs (
@@ -167,24 +194,27 @@ const make = Effect.gen(function* () {
               try: () => Schema.decodeUnknownSync(JobPayloadFromJson)(row.payload),
               catch: (cause) => new DbOperationError({ operation: "parseJobPayload", cause }),
             });
-      return yield* Schema.decodeUnknownEffect(JobDefinitionSchema)({
+      const definition: Mutable<JobDefinitionInput> = {
         id: row.id,
         siteId: row.site_id,
         name: row.name,
         schedule: row.schedule,
-        ...(payload === undefined ? {} : { payload }),
         enabled: row.enabled === 1,
         nextRunAt: new Date(row.next_run_at).toISOString(),
-        ...(row.last_run_at === null
-          ? {}
-          : { lastRunAt: new Date(row.last_run_at).toISOString() }),
-        ...(row.last_status === null ? {} : { lastStatus: row.last_status }),
-        ...(row.last_error === null ? {} : { lastError: row.last_error }),
         runCount: row.run_count,
         version: row.version,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-      }).pipe(Effect.mapError((cause) => new DbOperationError({ operation: "parseJob", cause })));
+      };
+      if (payload !== undefined) definition.payload = payload;
+      if (row.last_run_at !== null) {
+        definition.lastRunAt = new Date(row.last_run_at).toISOString();
+      }
+      if (row.last_status !== null) definition.lastStatus = row.last_status;
+      if (row.last_error !== null) definition.lastError = row.last_error;
+      return yield* Schema.decodeUnknownEffect(JobDefinitionSchema)(definition).pipe(
+        Effect.mapError((cause) => new DbOperationError({ operation: "parseJob", cause })),
+      );
     });
 
   const readJobRow = (
@@ -192,15 +222,28 @@ const make = Effect.gen(function* () {
     siteId: SiteId,
     id: DocumentId,
   ): Effect.Effect<JobRow | undefined, DbOperationError> =>
-    runSync(
-      "getJob",
-      () => prepareStatement(site, SELECT_JOB_SQL).get(id, siteId) as JobRow | undefined,
-    );
+    runSync("getJob", () => {
+      const row = prepareStatement(site, SELECT_JOB_SQL).get(id, siteId);
+      return row === undefined ? undefined : Schema.decodeUnknownSync(JobRowSchema)(row);
+    });
+
+  const readJobIdRow = (
+    site: SiteDb,
+    siteId: SiteId,
+    name: string,
+  ): Effect.Effect<{ readonly id: string } | undefined, DbOperationError> =>
+    runSync("findJobByName", () => {
+      const row = prepareStatement(site, SELECT_JOB_BY_NAME_SQL).get(siteId, name);
+      return row === undefined ? undefined : Schema.decodeUnknownSync(JobIdRowSchema)(row);
+    });
 
   const encodePayload = (payload: JobPayload): string =>
     Schema.encodeSync(JobPayloadFromJson)(payload);
 
-  const reschedule = (expression: string, nowMs: number): Effect.Effect<number, JobInvalidInputError> =>
+  const reschedule = (
+    expression: string,
+    nowMs: number,
+  ): Effect.Effect<number, JobInvalidInputError> =>
     nextCronRunFromExpression(expression, nowMs).pipe(
       Effect.mapError((error) => new JobInvalidInputError({ message: error.message })),
     );
@@ -209,9 +252,10 @@ const make = Effect.gen(function* () {
     (siteId: SiteId): Effect.Effect<ReadonlyArray<JobDefinition>, DbOperationError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
-        const rows = yield* runSync(
-          "listJobs",
-          () => prepareStatement(site, SELECT_JOBS_SQL).all(siteId) as unknown as JobRow[],
+        const rows = yield* runSync("listJobs", () =>
+          Schema.decodeUnknownSync(JobRowsSchema)(
+            prepareStatement(site, SELECT_JOBS_SQL).all(siteId),
+          ),
         );
         return yield* Effect.forEach(rows, parseJob);
       }).pipe(Effect.scoped),
@@ -239,13 +283,7 @@ const make = Effect.gen(function* () {
     ): Effect.Effect<JobDefinition, JobInvalidInputError | DbOperationError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
-        const existing = yield* runSync(
-          "findJobByName",
-          () =>
-            prepareStatement(site, SELECT_JOB_BY_NAME_SQL).get(siteId, input.name) as
-              | { id: string }
-              | undefined,
-        );
+        const existing = yield* readJobIdRow(site, siteId, input.name);
         if (existing !== undefined) {
           return yield* new JobInvalidInputError({
             message: `job name "${input.name}" already exists`,
@@ -305,13 +343,7 @@ const make = Effect.gen(function* () {
 
       if (input.name !== undefined && input.name !== existing.name) {
         const nextName = input.name;
-        const clash = yield* runSync(
-          "findJobByName",
-          () =>
-            prepareStatement(site, SELECT_JOB_BY_NAME_SQL).get(siteId, nextName) as
-              | { id: string }
-              | undefined,
-        );
+        const clash = yield* readJobIdRow(site, siteId, nextName);
         if (clash !== undefined) {
           return yield* new JobInvalidInputError({
             message: `job name "${nextName}" already exists`,
@@ -345,10 +377,7 @@ const make = Effect.gen(function* () {
         if (existing === undefined) {
           return yield* new JobNotFoundError({ siteId, id });
         }
-        if (
-          typeof input.expectedVersion === "number" &&
-          existing.version !== input.expectedVersion
-        ) {
+        if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
           return yield* new JobConflictError({
             id,
             expectedVersion: input.expectedVersion,
@@ -385,18 +414,14 @@ const make = Effect.gen(function* () {
   );
 
   const deleteJob = Effect.fn("Jobs.deleteJob")(
-    (
-      siteId: SiteId,
-      id: DocumentId,
-      expectedVersion?: number,
-    ): Effect.Effect<void, JobError> =>
+    (siteId: SiteId, id: DocumentId, expectedVersion?: number): Effect.Effect<void, JobError> =>
       Effect.gen(function* () {
         const site = yield* openSite(siteId);
         const existing = yield* readJobRow(site, siteId, id);
         if (existing === undefined) {
           return yield* new JobNotFoundError({ siteId, id });
         }
-        if (typeof expectedVersion === "number" && existing.version !== expectedVersion) {
+        if (expectedVersion !== undefined && existing.version !== expectedVersion) {
           return yield* new JobConflictError({
             id,
             expectedVersion,
@@ -412,7 +437,11 @@ const make = Effect.gen(function* () {
       }).pipe(Effect.scoped),
   );
 
-  const executeRow = (site: SiteDb, row: JobRow, nowMs: number): Effect.Effect<boolean, DbOperationError> =>
+  const executeRow = (
+    site: SiteDb,
+    row: JobRow,
+    nowMs: number,
+  ): Effect.Effect<boolean, DbOperationError> =>
     Effect.gen(function* () {
       const job = yield* parseJob(row);
       const outcome = yield* forwarder.forward(job);
@@ -429,7 +458,14 @@ const make = Effect.gen(function* () {
              SET last_run_at = ?, last_status = ?, last_error = ?, run_count = run_count + 1,
                  next_run_at = ?, version = version + 1, updated_at = ?
            WHERE id = ?`,
-        ).run(nowMs, outcome.ok ? "success" : "error", outcome.error ?? null, nextRunAt, at, row.id),
+        ).run(
+          nowMs,
+          outcome.ok ? "success" : "error",
+          outcome.error ?? null,
+          nextRunAt,
+          at,
+          row.id,
+        ),
       );
       return outcome.ok;
     });
@@ -456,9 +492,10 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const file = path.join(config.storageRoot, entry);
       const site = yield* connections.open(file, initJobs);
-      const rows = yield* runSync(
-        "listDueJobs",
-        () => prepareStatement(site, SELECT_DUE_JOBS_SQL).all(nowMs) as unknown as JobRow[],
+      const rows = yield* runSync("listDueJobs", () =>
+        Schema.decodeUnknownSync(JobRowsSchema)(
+          prepareStatement(site, SELECT_DUE_JOBS_SQL).all(nowMs),
+        ),
       );
       let processed = 0;
       for (const row of rows) {
@@ -473,7 +510,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const entries = yield* fs
           .readDirectory(config.storageRoot)
-          .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
+          .pipe(Effect.orElseSucceed(() => []));
         let processed = 0;
         for (const entry of entries) {
           if (!entry.endsWith(".sqlite")) {

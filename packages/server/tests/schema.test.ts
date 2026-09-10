@@ -12,7 +12,7 @@ import {
   Stream,
 } from "effect";
 import * as Result from "effect/Result";
-import { SiteId, type SchemaRowChangeEvent } from "@ism0080/forge-core";
+import { SiteId, type SchemaRowChangeEvent, type SchemaRowData } from "@ism0080/forge-core";
 import {
   SchemaInvalidInputError,
   SchemaMigrationError,
@@ -89,6 +89,17 @@ const failureOf = <A>(effect: Effect.Effect<A, unknown, SchemaService>) =>
     return Result.isFailure(result) ? result.failure : undefined;
   });
 
+const expectError = <T extends Error>(cause: unknown, ctor: new (...args: never[]) => T): T => {
+  expect(cause).toBeInstanceOf(ctor);
+  if (!(cause instanceof ctor)) {
+    throw new Error(`expected instance of ${ctor.name}`);
+  }
+  return cause;
+};
+
+const rowString = (row: SchemaRowData, column: string): string =>
+  Schema.decodeUnknownSync(Schema.String)(row[column]);
+
 describe("SchemaService.applyMigrations", () => {
   it.effect("applies ordered Drizzle migrations split at statement breakpoints", () =>
     withSchema(
@@ -149,7 +160,7 @@ describe("SchemaService.applyMigrations", () => {
           ),
         );
         expect(error).toBeInstanceOf(SchemaMigrationError);
-        expect((error as SchemaMigrationError).message).toContain("hash changed");
+        expect(expectError(error, SchemaMigrationError).message).toContain("hash changed");
       }),
     ),
   );
@@ -163,7 +174,9 @@ describe("SchemaService.applyMigrations", () => {
           schema.applyMigrations(siteId, [secondMigration], "deploy-3"),
         );
         expect(error).toBeInstanceOf(SchemaMigrationError);
-        expect((error as SchemaMigrationError).message).toContain("missing or out of order");
+        expect(expectError(error, SchemaMigrationError).message).toContain(
+          "missing or out of order",
+        );
       }),
     ),
   );
@@ -216,7 +229,7 @@ describe("SchemaService.applyMigrations", () => {
             "limited-deployment",
           ),
         );
-        expect((tooMany as SchemaMigrationError).message).toContain("count exceeds");
+        expect(expectError(tooMany, SchemaMigrationError).message).toContain("count exceeds");
 
         const tooLarge = yield* failureOf(
           schema.applyMigrations(
@@ -225,7 +238,7 @@ describe("SchemaService.applyMigrations", () => {
             "limited-deployment",
           ),
         );
-        expect((tooLarge as SchemaMigrationError).message).toContain("exceeds 10 bytes");
+        expect(expectError(tooLarge, SchemaMigrationError).message).toContain("exceeds 10 bytes");
       }),
       {
         migrate: false,
@@ -245,7 +258,9 @@ describe("SchemaService.applyMigrations", () => {
         const error = yield* failureOf(
           schema.applyMigrations(siteId, [{ id: "slow", sql: "SELECT 1" }], "timed-deployment"),
         );
-        expect((error as SchemaMigrationError).message).toContain("execution exceeded 0ms");
+        expect(expectError(error, SchemaMigrationError).message).toContain(
+          "execution exceeded 0ms",
+        );
       }),
       { migrate: false, config: { DB_MIGRATION_TIMEOUT_MS: 0 } },
     ),
@@ -266,7 +281,7 @@ describe("SchemaService rows", () => {
         expect(inserted.active).toBe(1);
         expect(inserted.profile).toBe('{"role":"admin"}');
 
-        const fetched = yield* schema.getRow(siteId, "users", inserted.id as string);
+        const fetched = yield* schema.getRow(siteId, "users", rowString(inserted, "id"));
         expect(fetched).toEqual(inserted);
       }),
     ),
@@ -294,7 +309,7 @@ describe("SchemaService rows", () => {
       Effect.gen(function* () {
         const schema = yield* SchemaService;
         const inserted = yield* schema.insertRow(siteId, "users", { name: "Amy" });
-        const id = inserted.id as string;
+        const id = rowString(inserted, "id");
         expect(
           yield* failureOf(
             schema.updateRow(siteId, "users", id, {
@@ -325,7 +340,7 @@ describe("SchemaService rows", () => {
     withSchema(
       Effect.gen(function* () {
         const schema = yield* SchemaService;
-        const rows: Array<Record<string, unknown>> = [];
+        const rows: Array<SchemaRowData> = [];
         for (let index = 0; index < 5; index += 1) {
           rows.push(yield* schema.insertRow(siteId, "users", { name: `User ${index}` }));
         }
@@ -424,7 +439,7 @@ describe("SchemaService events", () => {
         yield* Effect.yieldNow;
 
         const inserted = yield* schema.insertRow(siteId, "users", { name: "Amy" });
-        const id = inserted.id as string;
+        const id = rowString(inserted, "id");
         yield* schema.updateRow(siteId, "users", id, { data: { name: "Amelia" } });
         yield* schema.deleteRow(siteId, "users", id);
 

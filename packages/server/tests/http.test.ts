@@ -1,6 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import {
+  DbCreateResponseSchema,
+  JobListResponseSchema,
+  JobResponseSchema,
+} from "@ism0080/forge-core";
 import { FetchHttpClient, HttpPlatform } from "effect/unstable/http";
 import * as Etag from "effect/unstable/http/Etag";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
@@ -63,7 +68,7 @@ const withServer = <A>(f: (handler: Handler) => Promise<A>): Promise<A> => {
   );
 };
 
-const jsonRequest = (url: string, method: string, body: unknown): Request =>
+const jsonRequest = (url: string, method: string, body: Schema.Json): Request =>
   new Request(url, {
     method,
     headers: { "content-type": "application/json" },
@@ -79,7 +84,7 @@ describe("HTTP contract", () => {
         jsonRequest("http://forge/api/db/posts", "POST", { siteId, data: { title: "hi" } }),
       );
       expect(create.status).toBe(201);
-      const { document } = (await create.json()) as { document: { id: string; version: number } };
+      const { document } = Schema.decodeUnknownSync(DbCreateResponseSchema)(await create.json());
 
       const list = await handler(new Request(`http://forge/api/db/posts?siteId=${siteId}`));
       expect(list.status).toBe(200);
@@ -150,12 +155,12 @@ describe("HTTP contract", () => {
         }),
       );
       expect(create.status).toBe(201);
-      const created = (await create.json()) as { job: { id: string; name: string; version: number } };
+      const created = Schema.decodeUnknownSync(JobResponseSchema)(await create.json());
       expect(created.job.name).toBe("nightly-cleanup");
 
       const list = await handler(new Request(`http://forge/api/jobs?siteId=${siteId}`));
       expect(list.status).toBe(200);
-      const listed = (await list.json()) as { jobs: ReadonlyArray<{ id: string }> };
+      const listed = Schema.decodeUnknownSync(JobListResponseSchema)(await list.json());
       expect(listed.jobs).toHaveLength(1);
 
       const run = await handler(
@@ -164,7 +169,7 @@ describe("HTTP contract", () => {
         }),
       );
       expect(run.status).toBe(200);
-      const ran = (await run.json()) as { job: { version: number; lastStatus: string } };
+      const ran = Schema.decodeUnknownSync(JobResponseSchema)(await run.json());
       expect(ran.job.lastStatus).toBe("success");
 
       const removed = await handler(
