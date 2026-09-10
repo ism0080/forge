@@ -324,9 +324,6 @@ forge deploy ./dist demo
 # Apply configured Drizzle migrations
 forge db push
 
-# Show current identity
-forge whoami
-
 # List server plugins and capabilities
 forge plugins list
 

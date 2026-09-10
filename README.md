@@ -172,7 +172,7 @@ const result = await client.webhook({
 
 ## Health
 
-- `GET /health` returns `{ ok: true }`.
+- `GET /health` returns `{ healthy: true }`.
 
 ## Multiple sites via subdomain
 

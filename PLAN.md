@@ -1,187 +1,133 @@
-# Forge Implementation Plan
+# Forge — Plan
 
 ## Goal
 
-Build an internal-only hosting platform inspired by Shopify Quick: deploy static sites in seconds and optionally add backend capabilities through a zero-config client API.
+Forge is a local-first toolkit for hosting small web apps and PWAs on a private
+Tailscale network. Each site is served under a path prefix (`/s/<siteId>/`), and
+the server provides shared backend primitives — SQLite-backed document and table
+storage with realtime events, file uploads, and webhook forwarding — so apps do
+not reimplement them. Templates and oxlint rules encode how apps should be
+structured, for both humans and agents.
 
-## Product Principles
+The runtime is a single Effect-based HTTP API behind NGINX, plus a CLI and a
+browser SDK. It is not a multi-tenant platform: Tailscale is the trust boundary.
 
-- Keep setup minimal: static files + URL + optional APIs.
-- Internal trust boundary first: authenticated org users only.
-- Prefer a small, fixed feature set over platform sprawl.
-- Make deployment simple: overwrite-based updates.
-- Add guardrails early (rate limits, quotas, validation).
+## Principles
 
-## Current State
+- Private by default: the private network is the access control; the server adds
+  no auth layer.
+- One small, fixed feature set; prefer reusing DB/webhook over adding surfaces.
+- Effect-native and typed end to end; the HTTP contract lives in `forge-core`
+  and is shared by the server and the SDK.
+- Overwrite deploys: `forge deploy` uploads the build output for a site id.
+- Templates and lint rules are the primary developer surface; keep them correct.
+- All published packages version and release in lockstep.
 
-The repo is an end-to-end local scaffold with the following packages:
+## Architecture
 
-- `packages/server`: Effect-based API with local filesystem storage and database adapters.
-- `packages/cli`: `forge` CLI for `init`, `deploy`, `whoami`, `plugins list`, and `dev`.
-- `packages/core`: shared types and schemas for config, DB, identity, and webhooks.
-- `packages/sdk`: browser-friendly SDK with DB CRUD, realtime subscriptions, and webhook helpers.
-- `packages/vite-plugin`: Vite plugin that exposes `forge.json` values through `virtual:forge`.
-- `docker-compose.yml`: local stack with API, persistent storage, and NGINX.
+- `packages/core` — shared Effect schemas/types plus the HttpApi contract
+  (`@ism0080/forge-core/api`).
+- `packages/server` — Effect `unstable/httpapi` app; per-site SQLite
+  (`node:sqlite`, WAL); filesystem object storage; DB event bus; webhook gateway;
+  OpenAPI at `/openapi.json`.
+- `packages/sdk` — browser/client SDK; synchronous `createClient`; typed
+  collection and Drizzle-table clients; realtime subscriptions; typed
+  `ForgeApiError`.
+- `packages/cli` — `forge init | deploy | db push | plugins list | dev`.
+- `packages/templates` — `default` and `pwa` starters, including template-level
+  `forge.json` defaults.
+- `packages/vite-plugin` — exposes `forge.json` via `virtual:forge`; sets Vite
+  `base` to `/s/<siteId>/` and exports `basePath`.
+- `packages/tools/oxlint` — `@ism0080/oxlint-plugin-forge` profiles.
+- `docker-compose.yml` + `nginx/` — API on `8787`, NGINX on `8880`; routes
+  `/s/<siteId>/` and `/api/`.
 
-### Implemented
+## Implemented
 
-- Static hosting with per-site namespaces (`sites/{siteId}/...`).
-- Wildcard subdomain routing via NGINX (`{site}.localhost`) and path-based routing (`/s/{site}/`).
-- Site directory page at `/directory`.
-- Deploy CLI with `forge.json` support and optional positional `deploy <folder> <site-id>`.
-- Pluggable DB service with local file adapter, CRUD endpoints, list/filter/pagination, optimistic concurrency, and websocket event streaming.
-- SDK DB client with `create`, `list`, `get`, `update`, `delete`, and `subscribe`.
-- File upload endpoint using base64 payloads.
-- Webhook gateway that forwards `POST /api/webhook` to an external API.
-- Identity endpoint (`/api/whoami`) with dev fallback and health check (`/health`).
-- Plugin registry endpoint (`/api/plugins`) listing identity and file capabilities.
-- Local npm registry publishing workflow for all public packages.
+Static hosting and routing:
 
-### Gaps and Backlog
+- Per-site namespaces (`sites/<siteId>/...`) served under `/s/<siteId>/` via
+  NGINX, with SPA fallback to `index.html` for non-asset routes.
+- Site directory at `/directory`, with delete.
+- `forge deploy` uploads a build folder and writes `spa` metadata so fallback
+  works when deploying `dist`.
 
-- No real authentication gate; identity is a dev fallback reading `X-Forge-User-*` headers.
-- No request logging, error telemetry, rate limits, quotas, or input payload limits beyond Effect schema validation.
-- DB has no indexes beyond filesystem layout.
-- No static asset caching strategy.
-- No AI proxy, data warehouse, or file presigned URL flow.
-- No backup/restore or operational dashboards.
+Database:
 
-## Phase 1: MVP (End-to-End Usable) — Mostly Complete
+- Per-site SQLite document collections: CRUD, list/filter, keyset pagination,
+  and optimistic concurrency via `expectedVersion`.
+- Drizzle-table row CRUD with typed SDK mapping; ordered migrations with hashes,
+  ordering/immutability checks, and configurable limits.
+- Realtime create/update/delete events over websocket for collections and tables.
 
-### 1) Scope and Constraints
+Other:
 
-- Internal-only access model.
-- No per-site ownership model at launch.
-- Overwrite deploy behavior (no versioning initially).
+- Base64 file upload to per-site object storage.
+- Webhook forwarding to `EXTERNAL_API_URL` with retries and timeouts.
+- Plugin registry (`/api/plugins`) — currently reports file capabilities.
+- CLI `init`, `deploy`, `db push`, `plugins list`, `dev`.
+- Templates `default` and `pwa` (React 19, TanStack Query/Router, Tailwind v4,
+  shadcn/ui on Base UI, vite-plugin-pwa, Drizzle), with subpath-aware Vite base
+  and router basepath and preconfigured `entry`/migrations.
+- One shared contract: the SDK depends on `forge-core`, not the server package.
+- Lockstep package versioning enforced by `scripts/versions.mjs`, wired into
+  `pnpm test`.
 
-### 2) Static Hosting Foundation — Done
+## Out of scope
 
-- Store each site under a dedicated namespace (`/sites/{subdomain}/...`).
-- Serve static assets through HTTP server/reverse proxy.
-- Add wildcard subdomain routing (`{site}.quick.local` -> site namespace).
+The earlier "internal hosting platform" direction is dropped:
 
-### 3) Authentication Gate — Not Started
+- No org SSO/auth gate, user identity, or `/api/whoami`; the private network is
+  the boundary.
+- No AI proxy, data warehouse/query API, billing, quotas, or abuse controls.
+- No multi-tenant ownership model.
 
-- Protect all site and API traffic with org auth (SSO/IAP-like).
-- Attach trusted user identity to each request context.
+## Known gaps / next
 
-### 4) Deploy CLI — Done
+Routing and hosting:
 
-- Implement `quick deploy <dir> --site <name>`.
-- Sync local files to site namespace.
-- Output deployed URL and basic deployment metadata.
+- Host-based subdomains in `nginx/default.conf` serve `index.html` for every
+  path, so subdomain assets are broken. `/s/<siteId>/` is the supported route;
+  either fix or remove subdomain routing.
+- Static responses have no caching/ETag; uploads send no content type (the
+  server infers it from the file extension).
 
-### 5) API Server + Browser SDK — Done
+API:
 
-- Add `/api/*` backend surface.
-- Create lightweight client SDK for browser usage.
-- Expose identity context through SDK.
+- No upload size/type limits; base64 bodies are buffered in memory.
+- Websocket subscriptions rely on network trust, with only a fixed sliding queue
+  for backpressure.
 
-### 6) Database API — Done
+DX:
 
-- Document collection model with CRUD.
-- Support basic list/filter/pagination.
-- Enforce site-level data isolation.
+- No CI; the version/alignment check only runs where `pnpm test` runs.
+- SDK table clients support keyset pagination but no typed field filters
+  (documents support `whereField`/`whereValue`).
 
-### 7) Realtime API — Done
+Ops:
 
-- Add websocket endpoint.
-- Publish create/update/delete events per site+collection channel.
-- Provide client subscribe/unsubscribe helpers.
+- No backup/restore tooling beyond SQLite `VACUUM INTO` guidance, and no
+  retention for stale databases or uploads.
+- `node:sqlite` is experimental; Docker builds on `node:25` while `.nvmrc` pins
+  v26.
+- `pnpm-lock.yaml` is gitignored, so installs are not reproducible from the repo.
 
-### 8) Operational Guardrails — Not Started
+## Success criteria
 
-- Request logging and error telemetry.
-- Rate limits per user/site.
-- Input validation and payload limits.
+- `forge init` → build → `forge deploy` yields a working app at `/s/<siteId>/`
+  with no manual configuration.
+- Apps can persist data (collections or Drizzle tables), paginate, and subscribe
+  to changes.
+- Webhooks can be sent without exposing provider secrets in the client.
+- Server and SDK stay typed against one shared contract, and packages never
+  drift in version.
+- The stack operates with low overhead on a private network.
 
-## Phase 2: Core Capability Expansion — Partially Complete
+## Versioning and release
 
-### 1) File Uploads — Done (Basic)
-
-- Upload endpoint with base64 payloads.
-- Per-site storage namespaces.
-- Size/type limits and retention policy still needed.
-
-### 2) AI Proxy API — Not Started
-
-- Keep provider keys server-side only.
-- Expose chat and image generation endpoints.
-- Add usage limits and cost controls.
-
-### 3) Identity API — Partially Done
-
-- Return authenticated user details (`id`, `name`, `email`, `team`).
-- Currently dev fallback; needs production trust boundary.
-- Optionally add directory lookup utilities.
-
-### 4) Data Warehouse API — Not Started
-
-- Read-only query endpoint for analytics source.
-- Allowlist datasets/tables and enforce timeouts.
-- Return normalized, schema-stable JSON.
-
-### 5) CLI and DX Enhancements — Partially Done
-
-- `quick init` starter template — Done.
-- `quick dev` local preview mode — Done (runs `docker compose up --build`).
-- `quick doctor` diagnostics for auth/config — Not Started.
-
-### 6) Reliability Improvements — Not Started
-
-- Static asset caching strategy.
-- DB indexing for common access paths.
-- Connection limits and websocket backpressure.
-
-## Phase 3: Scale, Governance, and Polish — Not Started
-
-### 1) Governance and Safety
-
-- Quotas for storage, DB volume, websocket usage, API calls.
-- Abuse detection and temporary throttling.
-- Audit trail for deploys and destructive actions.
-
-### 2) Ecosystem and Discovery
-
-- Internal site directory (search, tags, metadata).
-- Shared library publishing/discovery model.
-- Curated example apps (polls, leaderboards, collaboration).
-
-### 3) SRE Readiness
-
-- Health checks, SLOs, dashboards, alerting.
-- Backup/restore for DB and uploads.
-- Dependency failure fallback behaviors.
-
-### 4) Performance and Cost
-
-- Optimize hot paths and runtime choices.
-- Compression and asset optimization.
-- Infrastructure footprint tuning.
-
-### 5) Developer Experience
-
-- Typed SDK.
-- Improved docs and copy-paste snippets.
-- Actionable API error codes.
-
-## Recommended Build Order
-
-1. Static hosting + wildcard routing — Done
-2. Auth gate — Next
-3. Deploy CLI — Done
-4. Database CRUD — Done
-5. Realtime subscriptions — Done
-6. File uploads — Done (basic)
-7. AI proxy
-8. Identity API production wiring
-9. Data warehouse API
-10. Quotas, observability, and polish
-
-## Success Criteria
-
-- A user can run deploy once and share a working internal URL.
-- A site can store/retrieve data and receive realtime updates.
-- A site can call AI APIs without exposing provider secrets.
-- Basic abuse controls prevent obvious runaway usage.
-- Platform remains simple enough to operate with low overhead.
+- All published `@ism0080/*` packages share one version and are released
+  together.
+- `pnpm version:check` enforces alignment and bump-on-change (also runs as part
+  of `pnpm test`).
+- `pnpm version:all [patch|minor|major|x.y.z]` bumps every package;
+  `pnpm publish:all` bumps, publishes to the local registry, and tags `vX.Y.Z`.
