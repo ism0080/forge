@@ -1,3 +1,4 @@
+import "varlock/auto-load";
 import { createServer } from "node:http";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import * as NodeServices from "@effect/platform-node/NodeServices";

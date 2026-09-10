@@ -4,5 +4,7 @@ data/
 .pnpm-store/
 .DS_Store
 .env
+.env.local
+.env.*.local
 coverage/
 tsconfig.tsbuildinfo

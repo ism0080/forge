@@ -20,8 +20,9 @@ components on Base UI, and vite-plugin-pwa.
 - `pnpm lint` — oxlint (uses `oxlint.config.ts`)
 - `pnpm format` — oxfmt
 - `pnpm typecheck` — TypeScript check
+- `pnpm env:check` — validate `/env.schema` with varlock
 
-Run `pnpm lint` and `pnpm typecheck` before finishing a change.
+Run `pnpm lint`, `pnpm typecheck`, and `pnpm env:check` before finishing a change.
 
 ## Conventions
 
@@ -31,6 +32,14 @@ Run `pnpm lint` and `pnpm typecheck` before finishing a change.
   (shadcn-style copy-in). Edit them in place; do not add wrapper components.
 - Merge classes with `cn()` from `@/lib/utils`.
 - Dark mode is driven by `prefers-color-scheme` via CSS variables in `src/globals.css`.
+
+## Environment
+
+Environment variables are declared in the root `.env.schema` and resolved with
+[varlock](https://varlock.dev). The schema is the single source of truth — keep
+it accurate and never put secret values in it. Local overrides go in `.env.local`
+(git-ignored); process env vars always win. The server imports
+`varlock/auto-load`, so env is validated and injected at boot.
 
 ## Lint rules
 

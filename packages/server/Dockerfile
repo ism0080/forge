@@ -43,6 +43,12 @@ COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modul
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 
+# Environment schema resolved by `varlock/auto-load` at boot (loadPath "../../")
+COPY .env.schema ./.env.schema
+
+# `varlock/auto-load` shells out to the CLI, so keep its package-local bin on PATH
+ENV PATH="/app/packages/server/node_modules/.bin:${PATH}"
+
 EXPOSE 8787
 
 CMD ["node", "packages/server/dist/main.js"]

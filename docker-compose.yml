@@ -3,22 +3,15 @@ services:
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    environment:
-      PORT: 8787
-      SITE_BUCKET: forge-sites
-      STORAGE_ROOT: /app/data
-      DATABASE_ROOT: /app/data/db
-      DB_MIGRATION_MAX_COUNT: 100
-      DB_MIGRATION_MAX_BYTES: 1000000
-      DB_MIGRATION_MAX_BUNDLE_BYTES: 5000000
-      DB_MIGRATION_TIMEOUT_MS: 30000
-      EXTERNAL_API_URL: ${EXTERNAL_API_URL}
-      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY}
+    # Non-secret config lives in .env.schema (baked into the image); this only
+    # layers in local overrides/secrets when .env.local exists.
+    env_file:
+      - path: .env.local
+        required: false
     volumes:
       - forge-data:/app/data
     ports:
       - "8787:8787"
-    env_file: .env
 
   nginx:
     image: nginx:1.27-alpine

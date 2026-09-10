@@ -40,6 +40,24 @@ Services:
 - API: `http://localhost:8787`
 - NGINX: `http://localhost:8880`
 
+## Environment
+
+Environment variables are declared in `.env.schema` and validated with
+[varlock](https://varlock.dev). The schema is committed and is the single source
+of truth; put non-secret defaults there and local values in `.env.local`
+(git-ignored). Process environment variables always take precedence.
+
+```bash
+pnpm env:check   # validate the schema and show resolved values
+pnpm dev:api     # runs the API through `varlock run`
+```
+
+The server imports `varlock/auto-load`, so `pnpm dev:api` and the Docker image
+validate and inject env at boot. Docker Compose declares no env inline; it layers
+in `.env.local` when present, so the schema stays the single source of truth. The
+webhook gateway is disabled unless `EXTERNAL_API_URL` (and usually
+`EXTERNAL_API_KEY`) are set.
+
 ## Templates
 
 `forge init` scaffolds a new project from a template in `packages/templates`:

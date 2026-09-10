@@ -1,6 +1,6 @@
 {
   "name": "@ism0080/forge-server",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
@@ -13,10 +13,14 @@
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.80",
     "@ism0080/forge-core": "workspace:*",
-    "effect": "4.0.0-beta.80"
+    "effect": "4.0.0-beta.80",
+    "varlock": "^1.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
     "tsx": "^4.20.3"
+  },
+  "varlock": {
+    "loadPath": "../../"
   }
 }
