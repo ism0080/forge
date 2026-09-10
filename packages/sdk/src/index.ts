@@ -13,7 +13,7 @@ import { CollectionId, DocumentId, SiteId } from "@ism0080/forge-core";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
-import { Api } from "@ism0080/forge-server/api";
+import { Api } from "@ism0080/forge-core/api";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 
@@ -219,9 +219,38 @@ const drizzleTableMapping = (table: AnySQLiteTable): TableMapping => {
   };
 };
 
-export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions) => {
+export class ForgeApiError extends Error {
+  readonly code: string;
+
+  constructor(code: string, options?: { readonly cause?: unknown }) {
+    super(code, options?.cause !== undefined ? { cause: options.cause } : undefined);
+    this.name = "ForgeApiError";
+    this.code = code;
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const errorCode = (error: unknown): string => {
+  if (isRecord(error) && typeof error.error === "string") {
+    return error.error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "unknown error";
+};
+
+const toForgeApiError = (error: unknown): ForgeApiError =>
+  error instanceof ForgeApiError ? error : new ForgeApiError(errorCode(error), { cause: error });
+
+const run = <A>(effect: Effect.Effect<A, unknown>): Promise<A> =>
+  Effect.runPromise(effect.pipe(Effect.mapError(toForgeApiError)));
+
+export const createClient = ({ baseUrl, siteId = "" }: ForgeClientOptions) => {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-  const client = await Effect.runPromise(
+  const client = Effect.runSync(
     HttpApiClient.make(Api, { baseUrl: normalizedBaseUrl }).pipe(
       Effect.provide(FetchHttpClient.layer),
     ),
@@ -248,7 +277,7 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
       typeof table === "string" ? stringTableMapping(table) : drizzleTableMapping(table);
     return {
       list: (query) =>
-        Effect.runPromise(
+        run(
           client["server.schema"]["schema.rows.list"]({
             params: { table: mapping.name },
             query: {
@@ -263,21 +292,21 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
           ...(nextCursor !== undefined ? { nextCursor } : {}),
         })),
       get: (id) =>
-        Effect.runPromise(
+        run(
           client["server.schema"]["schema.rows.get"]({
             params: { table: mapping.name, id },
             query: { siteId: site },
           }),
         ).then(({ row }) => ({ row: mapping.decode(row) })),
       insert: (data) =>
-        Effect.runPromise(
+        run(
           client["server.schema"]["schema.rows.insert"]({
             params: { table: mapping.name },
             payload: { siteId: site, data: mapping.encode(data) },
           }),
         ).then(({ row }) => ({ row: mapping.decode(row) })),
       update: (id, data, expectedVersion) =>
-        Effect.runPromise(
+        run(
           client["server.schema"]["schema.rows.update"]({
             params: { table: mapping.name, id },
             payload: {
@@ -288,7 +317,7 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
           }),
         ).then(({ row }) => ({ row: mapping.decode(row) })),
       delete: (id, expectedVersion) =>
-        Effect.runPromise(
+        run(
           client["server.schema"]["schema.rows.delete"]({
             params: { table: mapping.name, id },
             query: {
@@ -316,41 +345,41 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
 
   return {
     webhook: (input: WebhookSendInput) =>
-      Effect.runPromise(client["server.webhook.gateway"]["webhook.forward"]({ payload: input })),
+      run(client["server.webhook.gateway"]["webhook.forward"]({ payload: input })),
     db: {
       collection: (name: string) => {
         const collection = CollectionId.make(ensureNoLeadingSlash(name));
         return {
           list: (query?: DbListQuery) =>
-            Effect.runPromise(
+            run(
               client["server.db"]["db.documents.list"]({
                 params: { collection },
                 query: { ...query, siteId: site },
               }),
             ),
           create: (input: DbCreateInput) =>
-            Effect.runPromise(
+            run(
               client["server.db"]["db.documents.create"]({
                 params: { collection },
                 payload: { siteId: site, data: input.data, id: input.id },
               }),
             ),
           get: (id: string) =>
-            Effect.runPromise(
+            run(
               client["server.db"]["db.documents.get"]({
                 params: { collection, id: DocumentId.make(id) },
                 query: { siteId: site },
               }),
             ),
           update: (id: string, input: DbUpdateInput) =>
-            Effect.runPromise(
+            run(
               client["server.db"]["db.documents.update"]({
                 params: { collection, id: DocumentId.make(id) },
                 payload: { siteId: site, data: input.data, expectedVersion: input.expectedVersion },
               }),
             ),
           delete: (id: string, input?: DbDeleteInput) =>
-            Effect.runPromise(
+            run(
               client["server.db"]["db.documents.delete"]({
                 params: { collection, id: DocumentId.make(id) },
                 query: {
@@ -364,7 +393,7 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
         };
       },
       applyMigrations: (deploymentId: string, migrations: ReadonlyArray<ForgeMigration>) =>
-        Effect.runPromise(
+        run(
           client["server.schema"]["schema.migrations.apply"]({
             payload: { siteId: site, deploymentId, migrations: [...migrations] },
           }),
@@ -372,7 +401,7 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
       table: tableClient,
     },
     upload: (input: UploadInput) =>
-      Effect.runPromise(
+      run(
         client["server.upload"]["upload.create"]({
           payload: {
             siteId: site,
@@ -383,7 +412,7 @@ export const createClient = async ({ baseUrl, siteId = "" }: ForgeClientOptions)
         }),
       ),
     plugins: {
-      list: () => Effect.runPromise(client["server.plugins"]["plugins.list"]({})),
+      list: () => run(client["server.plugins"]["plugins.list"]({})),
     },
   };
 };

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api.js";
+import { Api } from "@ism0080/forge-core/api";
 import {
   SchemaInvalidInputError,
   SchemaMigrationError,

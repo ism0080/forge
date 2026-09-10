@@ -9,6 +9,9 @@ export const defaultTemplate: Template = {
   id: "default",
   name: "Default",
   description: "A minimal Forge site with Vite, TypeScript, oxlint, and oxfmt.",
+  config: {
+    entry: "dist",
+  },
   files: [
     ...sharedFiles,
     {

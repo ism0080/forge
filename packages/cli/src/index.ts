@@ -15,7 +15,7 @@ import {
   type ForgeConfig,
 } from "@ism0080/forge-core";
 import { createClient } from "@ism0080/forge-sdk";
-import { getTemplate, templates } from "@ism0080/forge-templates";
+import { getTemplate, templates, type Template } from "@ism0080/forge-templates";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -47,18 +47,10 @@ const readConfig = () =>
     );
   });
 
-const scaffoldTemplate = (siteId: string, templateId: string) =>
+const scaffoldTemplate = (siteId: string, template: Template) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const template = getTemplate(templateId);
-
-    if (!template) {
-      const available = templates.map((t) => t.id).join(", ");
-      return yield* new CliError({
-        message: `Unknown template '${templateId}'. Available: ${available}`,
-      });
-    }
 
     for (const file of template.files) {
       const filePath = path.join(cwd, file.path);
@@ -81,7 +73,7 @@ const apiBaseUrlConfig = Config.string("FORGE_API_BASE_URL").pipe(
 );
 
 const makeClient = (options: { apiBaseUrl: string; siteId?: string }) =>
-  Effect.tryPromise({
+  Effect.try({
     try: () =>
       createClient({
         baseUrl: options.apiBaseUrl,
@@ -175,11 +167,22 @@ const init = Command.make(
     const fs = yield* FileSystem.FileSystem;
     const resolvedSiteId = Option.getOrElse(siteId, () => path.basename(cwd));
     const apiBaseUrl = yield* apiBaseUrlConfig;
+    const templateDefinition = getTemplate(template);
+
+    if (!templateDefinition) {
+      const available = templates.map((candidate) => candidate.id).join(", ");
+      return yield* new CliError({
+        message: `Unknown template '${template}'. Available: ${available}`,
+      });
+    }
+
+    const templateConfig = templateDefinition.config ?? {};
     const config: ForgeConfig = {
       siteId: SiteId.make(resolvedSiteId),
-      entry: ".",
+      entry: templateConfig.entry ?? ".",
       apiBaseUrl,
-      spa: true,
+      spa: templateConfig.spa ?? true,
+      ...(templateConfig.database !== undefined ? { database: templateConfig.database } : {}),
     };
 
     yield* fs
@@ -191,7 +194,7 @@ const init = Command.make(
       .pipe(Effect.orElseSucceed(() => false));
 
     if (!hasIndex) {
-      yield* scaffoldTemplate(resolvedSiteId, template);
+      yield* scaffoldTemplate(resolvedSiteId, templateDefinition);
     }
 
     yield* Effect.log(`Initialized forge site '${resolvedSiteId}' with ${configPath}`);
@@ -236,6 +239,16 @@ const deploy = Command.make(
       });
       yield* Effect.log(`uploaded ${rel}`);
     }
+
+    const siteConfig = JSON.stringify({ spa: config.spa ?? true });
+    yield* Effect.tryPromise({
+      try: () =>
+        client.upload({
+          path: "forge.json",
+          contentBase64: Buffer.from(siteConfig).toString("base64"),
+        }),
+      catch: cliError("Upload failed for forge.json"),
+    });
 
     yield* Effect.log(`Deploy complete for site '${config.siteId}'`);
   }),

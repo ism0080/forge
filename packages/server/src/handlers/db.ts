@@ -8,7 +8,7 @@ import {
 import { Effect, Queue, Schema, Stream } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api.js";
+import { Api } from "@ism0080/forge-core/api";
 import { DbEventsService } from "../services/db/events.js";
 import { DatabaseService } from "../services/db/service.js";
 

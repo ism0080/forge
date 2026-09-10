@@ -8,5 +8,5 @@
     "lib": ["es2022", "dom", "dom.iterable"]
   },
   "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../server" }]
+  "references": [{ "path": "../core" }]
 }

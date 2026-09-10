@@ -1,15 +1,9 @@
 {
   "name": "@ism0080/forge-server",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    "./api": {
-      "types": "./dist/api.d.ts",
-      "import": "./dist/api.js"
-    }
-  },
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",

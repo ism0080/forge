@@ -32,7 +32,7 @@ export const SitesGroup = HttpApiGroup.make("server.sites").add(
   }),
   HttpApiEndpoint.delete("sites.delete", "/directory/:siteId", {
     success: SiteDeletedResponse,
-    error: Schema.Union([SiteNotFoundError, SiteInternalError]),
+    error: [SiteNotFoundError, SiteInternalError],
     params: Schema.Struct({ siteId: SiteId }),
   }),
 );

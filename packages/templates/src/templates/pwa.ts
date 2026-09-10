@@ -9,6 +9,12 @@ export const pwaTemplate: Template = {
   id: "pwa",
   name: "PWA",
   description: "A React PWA starter with Vite, Tailwind CSS v4, vite-plugin-pwa, and shadcn/ui.",
+  config: {
+    entry: "dist",
+    database: {
+      migrations: "drizzle",
+    },
+  },
   files: [
     ...sharedFiles,
     {

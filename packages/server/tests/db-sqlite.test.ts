@@ -13,7 +13,6 @@ import {
 import type { DbDocument } from "@ism0080/forge-core";
 import { DatabaseService } from "../src/services/db/service.js";
 import { SqliteDatabaseLayer } from "../src/services/db/sqlite.js";
-import { DatabaseEngineLayer } from "../src/services/db/engine.js";
 import { DbEventsInMemoryLayer } from "../src/services/db/events.js";
 import { SiteConnectionsLayer } from "../src/services/db/sqlite-connection.js";
 
@@ -352,80 +351,5 @@ describe("SqliteDatabaseLayer", () => {
         }
       }),
     ),
-  );
-});
-
-describe("DatabaseEngineLayer", () => {
-  it.effect("provides the sqlite engine when configured", () =>
-    Effect.gen(function* () {
-      const fs = yield* Effect.service(FileSystem.FileSystem);
-      const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
-
-      const layer = DatabaseEngineLayer.pipe(
-        Layer.provide([
-          DbEventsInMemoryLayer,
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot, DB_ENGINE: "sqlite" }),
-          ),
-          SiteConnectionsLayer,
-        ]),
-      );
-
-      yield* Effect.gen(function* () {
-        const database = yield* DatabaseService;
-        const created = yield* database.createDocument(siteId, collection, {
-          data: { engine: "sqlite" },
-        });
-        expect(created.data).toEqual({ engine: "sqlite" });
-      }).pipe(Effect.provide(layer));
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("uses the legacy file engine by default", () =>
-    Effect.gen(function* () {
-      const fs = yield* Effect.service(FileSystem.FileSystem);
-      const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
-      const layer = DatabaseEngineLayer.pipe(
-        Layer.provide([
-          DbEventsInMemoryLayer,
-          ConfigProvider.layer(ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot })),
-          SiteConnectionsLayer,
-        ]),
-      );
-
-      yield* Effect.gen(function* () {
-        const database = yield* DatabaseService;
-        yield* database.createDocument(siteId, collection, {
-          id: DocumentId.make("legacy"),
-          data: { engine: "file" },
-        });
-        expect(yield* fs.exists(`${storageRoot}/site-a/posts/legacy.json`)).toBe(true);
-      }).pipe(Effect.provide(layer));
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("falls back to the file engine when configured", () =>
-    Effect.gen(function* () {
-      const fs = yield* Effect.service(FileSystem.FileSystem);
-      const storageRoot = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie);
-
-      const layer = DatabaseEngineLayer.pipe(
-        Layer.provide([
-          DbEventsInMemoryLayer,
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({ DATABASE_ROOT: storageRoot, DB_ENGINE: "file" }),
-          ),
-          SiteConnectionsLayer,
-        ]),
-      );
-
-      yield* Effect.gen(function* () {
-        const database = yield* DatabaseService;
-        const created = yield* database.createDocument(siteId, collection, {
-          data: { engine: "file" },
-        });
-        expect(created.data).toEqual({ engine: "file" });
-      }).pipe(Effect.provide(layer));
-    }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api.js";
+import { Api } from "@ism0080/forge-core/api";
 import { AppConfigService } from "../config/server.js";
 import { StorageService } from "../services/storage/service.js";
 

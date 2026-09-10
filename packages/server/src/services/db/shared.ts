@@ -4,9 +4,6 @@ import { Clock, Context, Effect, Layer, Random, Ref } from "effect";
 
 const SAFE_STORAGE_KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-export const cleanSegment = (value: string): string =>
-  value.replaceAll("\\", "-").replaceAll("/", "-").trim().replaceAll("..", "-");
-
 export const siteStorageKey = (siteId: string): string =>
   SAFE_STORAGE_KEY_PATTERN.test(siteId)
     ? siteId

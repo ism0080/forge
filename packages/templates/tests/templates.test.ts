@@ -61,6 +61,17 @@ describe("templates", () => {
     }
   });
 
+  it("wires Drizzle migrations into the PWA forge config", () => {
+    const pwa = templates.find((template) => template.id === "pwa");
+    expect(pwa?.config?.entry).toBe("dist");
+    expect(pwa?.config?.database?.migrations).toBe("drizzle");
+  });
+
+  it("deploys the default template from its build output", () => {
+    const base = templates.find((template) => template.id === "default");
+    expect(base?.config?.entry).toBe("dist");
+  });
+
   it("only shared files may be overridden, and only once", () => {
     for (const template of templates) {
       const counts = new Map<string, number>();

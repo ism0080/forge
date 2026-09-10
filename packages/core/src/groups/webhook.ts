@@ -2,7 +2,7 @@ import {
   WebhookSendErrorResponseSchema,
   WebhookSendInputSchema,
   WebhookSendSuccessResponseSchema,
-} from "@ism0080/forge-core";
+} from "../index.js";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
 export const WebhookGatewayGroup = HttpApiGroup.make("server.webhook.gateway").add(

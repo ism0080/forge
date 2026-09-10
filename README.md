@@ -75,10 +75,11 @@ node packages/cli/dist/index.js dev
 
 ## DB API
 
-The server includes a pluggable database service layer (similar to storage):
+The server stores documents in a per-site SQLite database (`node:sqlite`, WAL mode):
 
-- Interface: `packages/server/src/db/service.ts`
-- Local adapter: `packages/server/src/db/local-file.ts`
+- Service interface: `packages/server/src/services/db/service.ts`
+- SQLite adapter: `packages/server/src/services/db/sqlite.ts`
+- Per-site connections: `packages/server/src/services/db/sqlite-connection.ts`
 
 Current endpoints:
 
@@ -104,7 +105,7 @@ Notes:
 ```ts
 import { createClient } from "@ism0080/forge-sdk";
 
-const client = await createClient({
+const client = createClient({
   baseUrl: "http://localhost:8787",
   siteId: "demo",
 });
@@ -136,6 +137,21 @@ const unsubscribe = posts.subscribe({
 
 // Later:
 unsubscribe();
+```
+
+`createClient` is synchronous. Failed requests reject with a `ForgeApiError` whose `code` is the
+server error (for example `"document not found"` or `"version conflict"`):
+
+```ts
+import { ForgeApiError } from "@ism0080/forge-sdk";
+
+try {
+  await posts.get("missing");
+} catch (error) {
+  if (error instanceof ForgeApiError && error.code === "document not found") {
+    // handle not found
+  }
+}
 ```
 
 ## Webhook gateway
@@ -195,8 +211,8 @@ NGINX also maps the root path to the directory:
 
 - `http://localhost:8880/`
 
-By default, the CLI targets `http://localhost:8787`.
-Override with `FORGE_API_BASE_URL`.
+By default, the CLI targets the `apiBaseUrl` from its built-in config (your Forge API).
+Override per project with `FORGE_API_BASE_URL` or by editing `forge.json`.
 
 ## Vite plugin
 
@@ -211,9 +227,16 @@ export default {
 ```
 
 ```ts
-import { apiBaseUrl, baseUrl, siteId, spa, entry } from "virtual:forge";
+import { apiBaseUrl, baseUrl, siteId, basePath, spa, entry } from "virtual:forge";
 
-const client = await createClient({ baseUrl: apiBaseUrl, siteId });
+const client = createClient({ baseUrl: apiBaseUrl, siteId });
+```
+
+Sites are served under a subpath (`/s/<siteId>/`), so the plugin sets Vite's `base`
+to `/s/<siteId>/` and exposes it as `basePath`. Point client-side routers at the same base:
+
+```ts
+const router = createRouter({ routeTree, basepath: basePath.replace(/\/+$/, "") });
 ```
 
 Options:
@@ -221,7 +244,7 @@ Options:
 ```ts
 forgePlugin({
   configPath: "./forge.json", // default
-  base: "./", // default Vite base
+  base: "/s/demo/", // optional override; defaults to /s/<siteId>/
 });
 ```
 
@@ -248,18 +271,37 @@ Or set the registry once in the consumer `.npmrc`:
 @ism0080:registry=http://localhost:4873
 ```
 
+## Versioning and release
+
+All published `@ism0080/*` packages share a single version and are released
+together. `pnpm test` enforces alignment, and once a release is tagged (`vX.Y.Z`)
+it also fails if `packages/**` changed without a matching version bump, so no
+package can drift ahead of the others.
+
+```bash
+pnpm version:check   # enforce alignment and bump-on-change (also runs before tests)
+pnpm version:all     # bump every package (patch; also: minor, major, or an explicit x.y.z)
+pnpm publish:all     # bump, publish to the local registry, then tag vX.Y.Z
+```
+
+Tags use the `vX.Y.Z` form and are the baseline for the change check. Tag the
+current release once to adopt the workflow: `node scripts/versions.mjs tag`.
+
 ## Forge config
 
-Generated `forge.json`:
+Generated `forge.json` (default template):
 
 ```json
 {
   "siteId": "demo",
-  "entry": ".",
+  "entry": "dist",
   "apiBaseUrl": "http://localhost:8787",
   "spa": true
 }
 ```
+
+The PWA template also sets `"database": { "migrations": "drizzle" }` so `forge deploy`
+applies pending migrations before uploading assets.
 
 When `spa` is `true`, non-asset route misses fall back to `index.html` for client-side routing.
 

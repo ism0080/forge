@@ -44,9 +44,16 @@ export default defineConfig({
 Use the virtual module in application code:
 
 ```ts
-import { apiBaseUrl, baseUrl, siteId, spa, entry } from "virtual:forge";
+import { apiBaseUrl, baseUrl, siteId, basePath, spa, entry } from "virtual:forge";
 
-const client = await createClient({ baseUrl: apiBaseUrl, siteId });
+const client = createClient({ baseUrl: apiBaseUrl, siteId });
+```
+
+Sites are served under `/s/<siteId>/`. The plugin sets Vite's `base` to that
+subpath and exposes it as `basePath`; configure client-side routers with it:
+
+```ts
+const router = createRouter({ routeTree, basepath: basePath.replace(/\/+$/, "") });
 ```
 
 Options:
@@ -54,7 +61,7 @@ Options:
 ```ts
 forgePlugin({
   configPath: "./forge.json", // default
-  base: "./", // default Vite base
+  base: "/s/demo/", // optional override; defaults to /s/<siteId>/
 });
 ```
 
@@ -71,7 +78,7 @@ Create a client:
 ```ts
 import { createClient } from "@ism0080/forge-sdk";
 
-const client = await createClient({
+const client = createClient({
   baseUrl: "http://localhost:8787",
   siteId: "demo",
 });
@@ -161,12 +168,11 @@ Each site persists to one SQLite file under the database root:
 data/db/{siteId}.sqlite
 ```
 
-Engine selection is server-side configuration; site code and the SDK collection API above are unchanged:
+Storage is server-side configuration; site code and the SDK collection API above are unchanged:
 
-| Variable        | Default     | Description                                         |
-| --------------- | ----------- | --------------------------------------------------- |
-| `DB_ENGINE`     | `file`      | `sqlite` or `file` (legacy JSON-per-document store) |
-| `DATABASE_ROOT` | `./data/db` | Directory holding `{siteId}.sqlite` files           |
+| Variable        | Default     | Description                               |
+| --------------- | ----------- | ----------------------------------------- |
+| `DATABASE_ROOT` | `./data/db` | Directory holding `{siteId}.sqlite` files |
 
 Migration safeguards are configurable with `DB_MIGRATION_MAX_COUNT` (default `100`), `DB_MIGRATION_MAX_BYTES` (default `1000000`), `DB_MIGRATION_MAX_BUNDLE_BYTES` (default `5000000`), and `DB_MIGRATION_TIMEOUT_MS` (default `30000`). The timeout is checked between SQLite statements; `node:sqlite` cannot interrupt a synchronous statement already in progress.
 
@@ -176,7 +182,6 @@ Set in `docker-compose.yml` or `.env`:
 services:
   api:
     environment:
-      DB_ENGINE: sqlite
       DATABASE_ROOT: /app/data/db
 ```
 
@@ -243,7 +248,7 @@ Pass the Drizzle table object to the SDK. Forge infers select and insert types, 
 import { createClient } from "@ism0080/forge-sdk";
 import { messages } from "./db/schema";
 
-const client = await createClient({ baseUrl: apiBaseUrl, siteId });
+const client = createClient({ baseUrl: apiBaseUrl, siteId });
 const messageTable = client.db.table(messages);
 
 const inserted = await messageTable.insert({

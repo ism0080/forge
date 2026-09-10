@@ -1,4 +1,4 @@
-import { UploadRequestSchema, UploadResponseSchema } from "@ism0080/forge-core";
+import { UploadRequestSchema, UploadResponseSchema } from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 

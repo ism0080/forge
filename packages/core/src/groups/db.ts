@@ -11,7 +11,7 @@ import {
   DbUpdateResponseSchema,
   DocumentId,
   SiteId,
-} from "@ism0080/forge-core";
+} from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
@@ -31,12 +31,7 @@ const DbInternalError = Schema.Struct({
   error: Schema.Literal("internal error"),
 }).pipe(HttpApiSchema.status("InternalServerError"));
 
-const DbError = Schema.Union([
-  DbNotFoundError,
-  DbConflictError,
-  DbInternalError,
-  DbBadRequestError,
-]);
+const DbErrors = [DbNotFoundError, DbConflictError, DbInternalError, DbBadRequestError];
 
 export const DbGroup = HttpApiGroup.make("server.db").add(
   HttpApiEndpoint.get("db.events.get", "/api/db/events", {
@@ -49,31 +44,31 @@ export const DbGroup = HttpApiGroup.make("server.db").add(
   }),
   HttpApiEndpoint.get("db.documents.list", "/api/db/:collection", {
     success: DbListResponseSchema,
-    error: DbError,
+    error: DbErrors,
     params: Schema.Struct({ collection: CollectionId }),
     query: DbListQuerySchema,
   }),
   HttpApiEndpoint.get("db.documents.get", "/api/db/:collection/:id", {
     success: DbGetResponseSchema,
-    error: DbError,
+    error: DbErrors,
     params: Schema.Struct({ collection: CollectionId, id: DocumentId }),
     query: Schema.Struct({ siteId: SiteId }),
   }),
   HttpApiEndpoint.post("db.documents.create", "/api/db/:collection", {
     success: DbCreateResponseSchema.pipe(HttpApiSchema.status("Created")),
-    error: DbError,
+    error: DbErrors,
     params: Schema.Struct({ collection: CollectionId }),
     payload: DbCreateRequestSchema,
   }),
   HttpApiEndpoint.put("db.documents.update", "/api/db/:collection/:id", {
     success: DbUpdateResponseSchema,
-    error: DbError,
+    error: DbErrors,
     params: Schema.Struct({ collection: CollectionId, id: DocumentId }),
     payload: DbUpdateRequestSchema,
   }),
   HttpApiEndpoint.delete("db.documents.delete", "/api/db/:collection/:id", {
     success: DbDeleteResponseSchema,
-    error: DbError,
+    error: DbErrors,
     params: Schema.Struct({ collection: CollectionId, id: DocumentId }),
     query: DbDeleteRequestSchema,
   }),

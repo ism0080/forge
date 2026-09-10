@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { Api } from "../api.js";
+import { Api } from "@ism0080/forge-core/api";
 import { Effect, Redacted, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { WebhookConfigService } from "../config/webhook.js";

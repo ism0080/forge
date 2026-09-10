@@ -57,7 +57,7 @@ export default {
 ```ts
 import { createClient } from "@ism0080/forge-sdk";
 
-const client = await createClient({
+const client = createClient({
   baseUrl: "http://localhost:8787",
   siteId: "demo",
 });
@@ -123,7 +123,7 @@ Pass the Drizzle table object to the SDK for inferred types and SQLite value con
 import { createClient } from "@ism0080/forge-sdk";
 import { todos } from "./db/schema";
 
-const client = await createClient({ baseUrl: apiBaseUrl, siteId });
+const client = createClient({ baseUrl: apiBaseUrl, siteId });
 const todoTable = client.db.table(todos);
 
 const created = await todoTable.insert({ title: "Ship PWA", completed: false });
@@ -144,7 +144,7 @@ const unsubscribe = todoTable.subscribe({
 
 Current table operations are `get`, `insert`, `update`, `delete`, and `subscribe`. There is no typed list or arbitrary query API yet; use `client.db.collection()` when its list/filter API is sufficient.
 
-Drizzle tables always use the per-site SQLite database. `DB_ENGINE` only selects storage for `client.db.collection()`.
+Drizzle tables and `client.db.collection()` both use the same per-site SQLite database.
 
 ### Install from the local registry
 

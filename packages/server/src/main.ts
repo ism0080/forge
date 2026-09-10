@@ -7,7 +7,7 @@ import { routes } from "./routes.js";
 import { AppConfigLayer, serverConfig } from "./config/server.js";
 import { WebhookConfigLayer } from "./config/webhook.js";
 import { DbEventsConsoleTapLayer, DbEventsInMemoryLayer } from "./services/db/events.js";
-import { DatabaseEngineLayer } from "./services/db/engine.js";
+import { SqliteDatabaseLayer } from "./services/db/sqlite.js";
 import { SiteConnectionsLayer } from "./services/db/sqlite-connection.js";
 import { SchemaServiceLayer } from "./services/db/schema-service.js";
 import { LocalFileStorageLayer } from "./services/storage/local-file.js";
@@ -26,7 +26,7 @@ const ApplicationServicesLive = Layer.merge(
   Layer.mergeAll(
     AppConfigLayer,
     LocalFileStorageLayer,
-    DatabaseEngineLayer,
+    SqliteDatabaseLayer,
     SchemaServiceLayer,
     DbEventsConsoleTapLayer,
     WebhookConfigLayer,

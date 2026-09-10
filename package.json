@@ -10,14 +10,16 @@
     "docker": "docker compose up -d",
     "docker:new": "docker compose up --force-recreate --build -d",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tests.json",
-    "test": "vitest run",
+    "test": "node scripts/versions.mjs check && vitest run",
     "test:watch": "vitest",
     "prepare": "effect-language-service patch",
     "cli:global": "pnpm --filter @ism0080/forge-cli build && pnpm add -g ./packages/cli",
     "cli:link": "pnpm --filter @ism0080/forge-cli build && pnpm --dir packages/cli link --global",
     "lint": "oxlint --config oxlint.config.ts",
     "format": "oxfmt",
-    "publish:all": "pnpm -r exec npm version patch --no-git-tag-version && pnpm -r --if-present publish:local"
+    "version:check": "node scripts/versions.mjs check",
+    "version:all": "node scripts/versions.mjs bump",
+    "publish:all": "pnpm version:all && pnpm -r --if-present publish:local && node scripts/versions.mjs tag"
   },
   "dependencies": {
     "oxfmt": "^0.54.0",

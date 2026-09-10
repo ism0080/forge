@@ -7,7 +7,6 @@ services:
       PORT: 8787
       SITE_BUCKET: forge-sites
       STORAGE_ROOT: /app/data
-      DB_ENGINE: sqlite
       DATABASE_ROOT: /app/data/db
       DB_MIGRATION_MAX_COUNT: 100
       DB_MIGRATION_MAX_BYTES: 1000000

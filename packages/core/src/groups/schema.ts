@@ -1,4 +1,4 @@
-import { SchemaListQuerySchema, SchemaListResponseSchema, SiteId } from "@ism0080/forge-core";
+import { SchemaListQuerySchema, SchemaListResponseSchema, SiteId } from "../index.js";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 
@@ -34,17 +34,12 @@ const InternalError = Schema.Struct({
   error: Schema.Literal("internal error"),
 }).pipe(HttpApiSchema.status("InternalServerError"));
 
-const SchemaError = Schema.Union([
-  RowNotFoundError,
-  RowConflictError,
-  InternalError,
-  BadRequestError,
-]);
+const SchemaErrors = [RowNotFoundError, RowConflictError, InternalError, BadRequestError];
 
 export const SchemaGroup = HttpApiGroup.make("server.schema").add(
   HttpApiEndpoint.post("schema.migrations.apply", "/api/db/migrations", {
     success: ApplyMigrationsResponseSchema,
-    error: SchemaError,
+    error: SchemaErrors,
     payload: Schema.Struct({
       siteId: SiteId,
       deploymentId: Schema.String,
@@ -53,19 +48,19 @@ export const SchemaGroup = HttpApiGroup.make("server.schema").add(
   }),
   HttpApiEndpoint.get("schema.rows.list", "/api/tables/:table", {
     success: SchemaListResponseSchema,
-    error: SchemaError,
+    error: SchemaErrors,
     params: Schema.Struct({ table: Schema.String }),
     query: SchemaListQuerySchema,
   }),
   HttpApiEndpoint.get("schema.rows.get", "/api/tables/:table/:id", {
     success: RowResponseSchema,
-    error: SchemaError,
+    error: SchemaErrors,
     params: Schema.Struct({ table: Schema.String, id: Schema.String }),
     query: Schema.Struct({ siteId: SiteId }),
   }),
   HttpApiEndpoint.post("schema.rows.insert", "/api/tables/:table", {
     success: RowResponseSchema.pipe(HttpApiSchema.status("Created")),
-    error: SchemaError,
+    error: SchemaErrors,
     params: Schema.Struct({ table: Schema.String }),
     payload: Schema.Struct({
       siteId: SiteId,
@@ -74,7 +69,7 @@ export const SchemaGroup = HttpApiGroup.make("server.schema").add(
   }),
   HttpApiEndpoint.put("schema.rows.update", "/api/tables/:table/:id", {
     success: RowResponseSchema,
-    error: SchemaError,
+    error: SchemaErrors,
     params: Schema.Struct({ table: Schema.String, id: Schema.String }),
     payload: Schema.Struct({
       siteId: SiteId,
@@ -84,7 +79,7 @@ export const SchemaGroup = HttpApiGroup.make("server.schema").add(
   }),
   HttpApiEndpoint.delete("schema.rows.delete", "/api/tables/:table/:id", {
     success: Schema.Struct({ ok: Schema.Literal(true) }),
-    error: SchemaError,
+    error: SchemaErrors,
     params: Schema.Struct({ table: Schema.String, id: Schema.String }),
     query: Schema.Struct({
       siteId: SiteId,

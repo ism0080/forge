@@ -1,0 +1,134 @@
+import { describe, expect, it } from "@effect/vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { ConfigProvider, Layer, Schema } from "effect";
+import { FetchHttpClient, HttpPlatform } from "effect/unstable/http";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { AppConfigLayer } from "../src/config/server.js";
+import { WebhookConfigLayer } from "../src/config/webhook.js";
+import { routes } from "../src/routes.js";
+import { DbEventsInMemoryLayer } from "../src/services/db/events.js";
+import { SchemaServiceLayer } from "../src/services/db/schema-service.js";
+import { SiteConnectionsLayer } from "../src/services/db/sqlite-connection.js";
+import { SqliteDatabaseLayer } from "../src/services/db/sqlite.js";
+import { LocalFileStorageLayer } from "../src/services/storage/local-file.js";
+
+const makeAppLayer = (root: string) => {
+  const config = ConfigProvider.layer(
+    ConfigProvider.fromUnknown({
+      STORAGE_ROOT: join(root, "store"),
+      DATABASE_ROOT: join(root, "db"),
+    }),
+  );
+  const base = Layer.mergeAll(
+    SiteConnectionsLayer,
+    DbEventsInMemoryLayer,
+    NodeServices.layer,
+    config,
+  );
+  const platform = Layer.mergeAll(HttpPlatform.layer, Etag.layerWeak).pipe(Layer.provide(base));
+  const infra = Layer.mergeAll(base, platform);
+  const services = Layer.mergeAll(
+    AppConfigLayer,
+    LocalFileStorageLayer,
+    SqliteDatabaseLayer,
+    SchemaServiceLayer,
+    WebhookConfigLayer,
+    FetchHttpClient.layer,
+  ).pipe(Layer.provide(infra));
+  return routes.pipe(Layer.provideMerge(Layer.mergeAll(services, infra)));
+};
+
+type Handler = (request: Request) => Promise<Response>;
+
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+
+const withServer = <A>(f: (handler: Handler) => Promise<A>): Promise<A> => {
+  const root = mkdtempSync(join(tmpdir(), "forge-http-"));
+  const { handler, dispose } = HttpRouter.toWebHandler(makeAppLayer(root), {
+    disableLogger: true,
+  });
+  return f(handler).finally(() =>
+    dispose().then(() => rmSync(root, { recursive: true, force: true })),
+  );
+};
+
+const jsonRequest = (url: string, method: string, body: unknown): Request =>
+  new Request(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: encodeJson(body),
+  });
+
+const siteId = "http-demo";
+
+describe("HTTP contract", () => {
+  it("returns the documented document CRUD status codes", () =>
+    withServer(async (handler) => {
+      const create = await handler(
+        jsonRequest("http://forge/api/db/posts", "POST", { siteId, data: { title: "hi" } }),
+      );
+      expect(create.status).toBe(201);
+      const { document } = (await create.json()) as { document: { id: string; version: number } };
+
+      const list = await handler(new Request(`http://forge/api/db/posts?siteId=${siteId}`));
+      expect(list.status).toBe(200);
+
+      const found = await handler(
+        new Request(`http://forge/api/db/posts/${document.id}?siteId=${siteId}`),
+      );
+      expect(found.status).toBe(200);
+
+      const missing = await handler(
+        new Request(`http://forge/api/db/posts/missing?siteId=${siteId}`),
+      );
+      expect(missing.status).toBe(404);
+
+      const updateConflict = await handler(
+        jsonRequest(`http://forge/api/db/posts/${document.id}`, "PUT", {
+          siteId,
+          data: { title: "edited" },
+          expectedVersion: 99,
+        }),
+      );
+      expect(updateConflict.status).toBe(409);
+
+      const deleteConflict = await handler(
+        new Request(
+          `http://forge/api/db/posts/${document.id}?siteId=${siteId}&expectedVersion=99`,
+          { method: "DELETE" },
+        ),
+      );
+      expect(deleteConflict.status).toBe(409);
+
+      const deleted = await handler(
+        new Request(
+          `http://forge/api/db/posts/${document.id}?siteId=${siteId}&expectedVersion=${document.version}`,
+          { method: "DELETE" },
+        ),
+      );
+      expect(deleted.status).toBe(200);
+    }));
+
+  it("returns 404 for missing sites and unknown directory deletes", () =>
+    withServer(async (handler) => {
+      const site = await handler(new Request("http://forge/sites/nope/index.html"));
+      expect(site.status).toBe(404);
+
+      const deletion = await handler(
+        new Request("http://forge/directory/nope", { method: "DELETE" }),
+      );
+      expect(deletion.status).toBe(404);
+    }));
+
+  it("returns 400 for unknown tables", () =>
+    withServer(async (handler) => {
+      const unknown = await handler(
+        new Request(`http://forge/api/tables/does_not_exist?siteId=${siteId}`),
+      );
+      expect(unknown.status).toBe(400);
+    }));
+});

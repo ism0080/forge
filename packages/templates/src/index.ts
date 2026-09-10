@@ -1,4 +1,4 @@
-export type { Template, TemplateFile } from "./types.js";
+export type { Template, TemplateConfig, TemplateFile } from "./types.js";
 
 import { sharedFiles } from "./shared-files.js";
 import { defaultTemplate } from "./templates/default.js";

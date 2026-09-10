@@ -12,15 +12,25 @@ export interface ForgeVitePluginOptions {
 const VIRTUAL_MODULE_ID = "virtual:forge";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
+const siteBasePath = (siteId: string): string => `/s/${siteId}/`;
+
+const readSiteId = (configPath: string): string | undefined => {
+  try {
+    const raw = readFileSync(configPath, "utf8");
+    return Schema.decodeUnknownSync(ForgeConfigFromJson)(raw).siteId;
+  } catch {
+    return undefined;
+  }
+};
+
 export const forgePlugin = (options: ForgeVitePluginOptions = {}): Plugin => {
   const configPath = resolve(process.cwd(), options.configPath ?? "forge.json");
-  const base = options.base ?? "./";
+  const resolveBase = (siteId: string | undefined): string =>
+    options.base ?? (siteId !== undefined ? siteBasePath(siteId) : "./");
 
   return {
     name: "forge-config",
-    config: () => ({
-      base,
-    }),
+    config: () => ({ base: resolveBase(readSiteId(configPath)) }),
     resolveId(id) {
       if (id === VIRTUAL_MODULE_ID) {
         return RESOLVED_VIRTUAL_MODULE_ID;
@@ -66,6 +76,7 @@ export const forgePlugin = (options: ForgeVitePluginOptions = {}): Plugin => {
 export const apiBaseUrl = ${JSON.stringify(config.apiBaseUrl)};
 export const baseUrl = apiBaseUrl;
 export const siteId = ${JSON.stringify(config.siteId)};
+export const basePath = ${JSON.stringify(resolveBase(config.siteId))};
 export const spa = ${JSON.stringify(config.spa ?? true)};
 export const entry = ${JSON.stringify(config.entry ?? ".")};
 `;
