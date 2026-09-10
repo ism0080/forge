@@ -1,107 +1,54 @@
-import { defineRule } from "@oxlint/plugins";
-
-type Node = {
-  [key: string]: unknown;
-  range: [number, number];
-  type: string;
-};
+import { defineRule, type ESTree } from "@oxlint/plugins";
 
 const equalityOperators = new Set(["==", "===", "!=", "!=="]);
 
-const isNode = (value: unknown): value is Node =>
-  typeof value === "object" &&
-  value !== null &&
-  "type" in value &&
-  typeof value.type === "string" &&
-  "range" in value &&
-  Array.isArray(value.range);
+export const preferEffectMatchRule = defineRule({
+	meta: {
+		type: "problem",
+		docs: {
+			description:
+				"Use Match from Effect for chained literal ternaries over the same value.",
+		},
+		messages: {
+			preferMatch:
+				"Use Match from Effect instead of a chained literal ternary.",
+		},
+	},
+	createOnce(context) {
+		const isLiteral = (node: ESTree.Node): boolean =>
+			node.type === "Literal" ||
+			(node.type === "TemplateLiteral" && node.expressions.length === 0);
 
-const isLiteral = (node: unknown) =>
-  isNode(node) &&
-  (node.type === "Literal" ||
-    (node.type === "TemplateLiteral" &&
-      Array.isArray(node.expressions) &&
-      node.expressions.length === 0));
+		const comparedValue = (node: ESTree.Expression): string | undefined => {
+			if (
+				node.type !== "BinaryExpression" ||
+				!equalityOperators.has(node.operator)
+			) {
+				return undefined;
+			}
+			if (isLiteral(node.left)) return context.sourceCode.getText(node.right);
+			if (isLiteral(node.right)) return context.sourceCode.getText(node.left);
+			return undefined;
+		};
 
-const getComparedValue = ({
-  node,
-  getText,
-}: {
-  node: unknown;
-  getText: (node: Node) => string;
-}) => {
-  if (
-    !isNode(node) ||
-    node.type !== "BinaryExpression" ||
-    typeof node.operator !== "string" ||
-    !equalityOperators.has(node.operator)
-  ) {
-    return undefined;
-  }
+		return {
+			ConditionalExpression(node) {
+				if (node.parent?.type === "ConditionalExpression") return;
+				const value = comparedValue(node.test);
+				if (value === undefined) return;
 
-  if (isLiteral(node.left) && isNode(node.right)) {
-    return getText(node.right);
-  }
+				let alternate = node.alternate;
+				let literalChecks = 1;
+				while (alternate.type === "ConditionalExpression") {
+					if (comparedValue(alternate.test) !== value) return;
+					literalChecks += 1;
+					alternate = alternate.alternate;
+				}
 
-  if (isNode(node.left) && isLiteral(node.right)) {
-    return getText(node.left);
-  }
-
-  return undefined;
-};
-
-const rule = defineRule({
-  meta: {
-    type: "problem" as const,
-    docs: {
-      description: "Use Match from effect for chained literal ternaries over the same value.",
-    },
-  },
-  create(context) {
-    const sourceCode = context.sourceCode;
-    const getText = (node: Node) => sourceCode.getText(node);
-
-    return {
-      ConditionalExpression(node) {
-        if (node.parent?.type === "ConditionalExpression") {
-          return;
-        }
-
-        const comparedValue = getComparedValue({
-          node: node.test,
-          getText,
-        });
-
-        if (comparedValue === undefined) {
-          return;
-        }
-
-        let alternate = node.alternate;
-        let literalChecks = 1;
-
-        while (alternate.type === "ConditionalExpression") {
-          const alternateComparedValue = getComparedValue({
-            node: alternate.test,
-            getText,
-          });
-
-          if (alternateComparedValue !== comparedValue) {
-            return;
-          }
-
-          literalChecks += 1;
-          alternate = alternate.alternate;
-        }
-
-        if (literalChecks > 1) {
-          context.report({
-            node,
-            message: "Use Match from effect instead of a chained literal ternary.",
-          });
-        }
-      },
-    };
-  },
+				if (literalChecks > 1) {
+					context.report({ node, messageId: "preferMatch" });
+				}
+			},
+		};
+	},
 });
-
-export default rule;
