@@ -1,6 +1,6 @@
 ---
 name: forge
-description: Helps develop, configure, and deploy sites in the Forge monorepo. Use for forge.json, the Forge CLI, Vite plugin, SDK, Drizzle-backed SQLite tables, migrations, local registry installation, or site deployment.
+description: Helps develop, configure, and deploy sites in the Forge monorepo. Use for forge.json, the Forge CLI, Vite plugin, SDK (documents, typed Drizzle tables, uploads, webhooks, jobs), error handling, migrations, local registry installation, or site deployment.
 ---
 
 # Forge
@@ -12,7 +12,7 @@ description: Helps develop, configure, and deploy sites in the Forge monorepo. U
 3. Build the site
 4. Deploy: `forge deploy`
 
-Services: API at `http://localhost:8787`, NGINX at `http://localhost:8080`.
+Services: API at `http://localhost:8787`, NGINX at `http://localhost:8880`.
 
 ## Workflows
 
@@ -67,6 +67,68 @@ await posts.create({ data: { title: "Hello" } });
 ```
 
 Use `client.db.collection()` for schemaless documents. Use the Drizzle workflow below for typed SQLite tables.
+
+### Search documents
+
+Collection lists accept a `search` term that runs a full-text query over the document JSON:
+
+```ts
+const matches = await posts.list({ search: "hello world" });
+```
+
+The query goes through a SQLite FTS5 index kept in sync by triggers on create/update/delete. Each whitespace-separated term is quoted before matching, so user input cannot inject FTS operators.
+
+### Upload assets
+
+`client.upload` takes a path and base64 content, decodes it locally, and sends the raw bytes to `POST /api/upload` as `application/octet-stream` with `siteId`, `path`, and optional `contentType` in the query string:
+
+```ts
+const result = await client.upload({
+  path: "assets/logo.svg",
+  contentBase64: base64String,
+  contentType: "image/svg+xml",
+});
+// result.key === "sites/demo/assets/logo.svg"
+```
+
+The server never decodes base64. Bodies larger than `UPLOAD_MAX_BYTES` (default 10 MB) are rejected with `413`. `path` is resolved inside the site's `sites/<siteId>/` prefix, and a provided `contentType` is recorded with the object (serving still infers content type from the file extension).
+
+### Handle API errors
+
+Server errors are typed `_tag`-discriminated bodies (`DocumentNotFoundError`, `VersionConflictError`, `JobNotFoundError`, `SchemaRowNotFoundError`, `InternalError`, ...). The promise-based SDK translates them into `ForgeApiError` with a stable `.code`:
+
+```ts
+try {
+  await posts.get("missing");
+} catch (error) {
+  if (error instanceof ForgeApiError && error.code === "document not found") {
+    // handle
+  }
+}
+```
+
+Codes include `"document not found"`, `"version conflict"`, `"job not found"`, `"row not found"`, and `"not found"`; invalid-input errors surface their server message as the code.
+
+### Schedule jobs
+
+Create cron jobs (5-field expressions evaluated in UTC) that fire through the webhook gateway:
+
+```ts
+const job = await client.jobs.create({
+  name: "nightly-cleanup",
+  schedule: "0 3 * * *",
+  payload: { kind: "cleanup" },
+});
+// job.nextRunAt is an ISO timestamp; version starts at 1
+
+await client.jobs.list();                 // all jobs for the site
+await client.jobs.get(job.id);            // by id
+await client.jobs.update(job.id, { enabled: false, expectedVersion: job.version });
+await client.jobs.run(job.id);            // run immediately
+await client.jobs.delete(job.id, job.version + 1);
+```
+
+CLI equivalents: `forge jobs list` and `forge jobs run <job-id>`. A background runner scans for due jobs every `JOB_RUNNER_INTERVAL_MS` (default `30000`) while `JOB_RUNNER_ENABLED` (default `true`) is set. Each occurrence is forwarded through the webhook gateway using the same `EXTERNAL_API_URL` / `EXTERNAL_API_KEY` as `client.webhook`, and the job records `lastStatus`, `lastError`, and `runCount`.
 
 ### Use SQLite with Drizzle
 

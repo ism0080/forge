@@ -103,6 +103,9 @@ const page = await posts.list({
   sortDir: "desc",
 });
 
+// Full-text search over the document JSON (SQLite FTS5, kept in sync by triggers)
+const matches = await posts.list({ search: "hello world" });
+
 // Get
 const fetched = await posts.get(doc.id);
 
@@ -158,6 +161,39 @@ const result = await client.webhook({
 });
 ```
 
+### Uploads
+
+```ts
+const result = await client.upload({
+  path: "assets/logo.svg",
+  contentBase64: base64String,
+  contentType: "image/svg+xml",
+});
+// result.key === "sites/demo/assets/logo.svg"
+```
+
+The SDK decodes the base64 locally and sends raw bytes to `POST /api/upload` as `application/octet-stream`, with `siteId`, `path`, and optional `contentType` as query parameters. The server does not decode base64. Bodies larger than `UPLOAD_MAX_BYTES` (default `10000000`) are rejected with a `413` `UploadTooLargeError`. `path` is scoped under `sites/<siteId>/`; a provided `contentType` is recorded with the object, though serving still infers content type from the file extension.
+
+### Scheduled jobs
+
+Per-site cron jobs run on a schedule and forward each occurrence through the webhook gateway:
+
+```ts
+const job = await client.jobs.create({
+  name: "nightly-cleanup",
+  schedule: "0 3 * * *",
+  payload: { kind: "cleanup" },
+});
+
+await client.jobs.list();                 // all jobs for the site
+await client.jobs.get(job.id);            // by id
+await client.jobs.update(job.id, { enabled: false, expectedVersion: job.version });
+await client.jobs.run(job.id);            // run immediately
+await client.jobs.delete(job.id, job.version + 1);
+```
+
+Schedules are 5-field cron expressions (`minute hour day month weekday`) evaluated in UTC. A background runner scans for due jobs every `JOB_RUNNER_INTERVAL_MS` (default `30000`) while `JOB_RUNNER_ENABLED` (default `true`). Each run is forwarded through the webhook gateway (the same `EXTERNAL_API_URL` / `EXTERNAL_API_KEY` as webhooks); the job records `lastStatus`, `lastError`, and `runCount`. CLI: `forge jobs list`, `forge jobs run <job-id>`.
+
 ## Database
 
 ### SQLite storage engine
@@ -170,9 +206,10 @@ data/db/{siteId}.sqlite
 
 Storage is server-side configuration; site code and the SDK collection API above are unchanged:
 
-| Variable        | Default     | Description                               |
-| --------------- | ----------- | ----------------------------------------- |
-| `DATABASE_ROOT` | `./data/db` | Directory holding `{siteId}.sqlite` files |
+| Variable                | Default     | Description                                                          |
+| ----------------------- | ----------- | -------------------------------------------------------------------- |
+| `DATABASE_ROOT`         | `./data/db` | Directory holding `{siteId}.sqlite` files                            |
+| `SITE_DB_IDLE_TTL_MS`   | `300000`    | Milliseconds an idle per-site SQLite connection stays open before it is closed and reaped |
 
 Migration safeguards are configurable with `DB_MIGRATION_MAX_COUNT` (default `100`), `DB_MIGRATION_MAX_BYTES` (default `1000000`), `DB_MIGRATION_MAX_BUNDLE_BYTES` (default `5000000`), and `DB_MIGRATION_TIMEOUT_MS` (default `30000`). The timeout is checked between SQLite statements; `node:sqlite` cannot interrupt a synchronous statement already in progress.
 
@@ -274,7 +311,7 @@ const { rows, nextCursor } = await messageTable.list({ sortDir: "desc", limit: 2
 
 `list` orders by the table's `created_at`/`createdAt` column (using `id` as a tiebreaker), supports `limit`, `cursor`, and `sortDir` (`asc`/`desc`), and returns the raw managed columns decoded through the Drizzle table mapping. Pass `nextCursor` back as `cursor` to fetch the next page. Tables without a `created_at` or `createdAt` column cannot be listed.
 
-Forge manages `id`, `version`, `createdAt`, and `updatedAt`; define all four columns in tables used through `client.db.table()`. Errors surface as HTTP status codes: `400` for invalid input or migration history, `404` for missing rows, and `409` for version conflicts.
+Forge manages `id`, `version`, `createdAt`, and `updatedAt`; define all four columns in tables used through `client.db.table()`. Errors surface as HTTP status codes: `400` for invalid input or migration history, `404` for missing rows, `409` for version conflicts, and `413` for uploads over `UPLOAD_MAX_BYTES`. Error bodies are `_tag`-discriminated (`DocumentNotFoundError`, `VersionConflictError`, `SchemaRowNotFoundError`, `InternalError`, ...). The SDK maps them to `ForgeApiError` with stable `.code` strings such as `"document not found"`, `"version conflict"`, `"row not found"`, and `"job not found"`; invalid-input errors use their server message as the code.
 
 ## Local registry
 
