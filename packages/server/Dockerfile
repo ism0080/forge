@@ -5,7 +5,7 @@ RUN npm install -g --ignore-scripts=false @nubjs/nub
 
 FROM base AS deps
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/server/package.json packages/server/package.json
 
@@ -13,6 +13,9 @@ RUN nub install
 
 FROM deps AS build
 
+# Root tsconfigs are copied after install so `nub install` does not try to
+# resolve their `extends` targets before the dependencies exist.
+COPY tsconfig.base.json tsconfig.json ./
 COPY packages/core packages/core
 COPY packages/server packages/server
 
@@ -39,6 +42,10 @@ COPY --from=prod-deps /app/packages/server/package.json ./packages/server/packag
 
 COPY --from=prod-deps /app/packages/server/node_modules ./packages/server/node_modules
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+
+# nub keeps a global virtual store; node_modules/.store symlinks point into it,
+# so the runtime image must carry it too.
+COPY --from=prod-deps /root/.cache/nub/pm/store /root/.cache/nub/pm/store
 
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
