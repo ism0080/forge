@@ -18,6 +18,12 @@ function RootComponent() {
 
   return (
     <>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        Skip to content
+      </a>
       <nav className="flex items-center justify-between border-b p-4">
         <Link to="/" className="font-medium">
           Home
@@ -26,7 +32,9 @@ function RootComponent() {
           {theme === "dark" ? "Light" : "Dark"}
         </Button>
       </nav>
-      <Outlet />
+      <main id="main">
+        <Outlet />
+      </main>
     </>
   );
 }

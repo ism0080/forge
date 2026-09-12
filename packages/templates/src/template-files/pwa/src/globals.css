@@ -26,6 +26,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #262626;
   --primary: #262626;
@@ -48,6 +49,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: color-mix(in srgb, #0a0a0a 95%, #ffffff);
   --foreground: #f5f5f5;
   --primary: #f5f5f5;
@@ -75,5 +77,15 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+  }
+  a,
+  button,
+  input,
+  label,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
   }
 }
