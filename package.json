@@ -22,15 +22,13 @@
     "version:all": "node scripts/versions.mjs bump",
     "publish:all": "pnpm version:all && pnpm -r --if-present publish:local && node scripts/versions.mjs tag"
   },
-  "dependencies": {
-    "oxfmt": "^0.67.0",
-    "oxlint": "^1.82.0"
-  },
   "devDependencies": {
     "@effect/language-service": "^0.87.2",
     "@effect/vitest": "4.0.0-rc.115",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^26.5.1",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
     "typescript": "^5.9.3",
     "varlock": "^1.19.0",
     "vitest": "^5.0.0"

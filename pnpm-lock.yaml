@@ -7,13 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      oxfmt:
-        specifier: ^0.67.0
-        version: 0.67.0
-      oxlint:
-        specifier: ^1.82.0
-        version: 1.82.0
     devDependencies:
       '@effect/language-service':
         specifier: ^0.87.2
@@ -27,6 +20,12 @@ importers:
       '@types/node':
         specifier: ^26.5.1
         version: 26.5.1
+      oxfmt:
+        specifier: ^0.67.0
+        version: 0.67.0
+      oxlint:
+        specifier: ^1.82.0
+        version: 1.82.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

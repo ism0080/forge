@@ -1,7 +1,32 @@
+# Dependencies and build output (always reinstalled/built inside the image)
 node_modules/
 **/node_modules/
 dist/
 **/dist/
+.pnpm-store/
+.pnpm-store/**
+
+# VCS, editor and agent tooling
 .git/
+.github/
 .opencode/
+.vscode/
+skills/
+
+# Repo tooling and docs not needed to build the server image
+scripts/
+nginx/
+*.md
+docker-compose.yml
+Dockerfile
+**/Dockerfile
 *.log
+
+# Local runtime data and test output
+data/
+coverage/
+
+# Secrets stay out of the build context; .env.schema is source, not a secret
+.env
+.env.*
+!.env.schema
