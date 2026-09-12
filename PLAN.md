@@ -125,7 +125,7 @@ Ops:
 - No backup/restore tooling beyond SQLite `VACUUM INTO` guidance, and no file
   retention for stale databases or uploads (idle connections are reaped after
   `SITE_DB_IDLE_TTL_MS`).
-- `node:sqlite` is experimental; Docker builds on `node:25` while `.nvmrc` pins
+- `node:sqlite` is experimental; Docker builds on `node:26` while `.nvmrc` pins
   v26.
 
 ## Success criteria

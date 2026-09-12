@@ -7,7 +7,7 @@ const PortSchema = Schema.NumberFromString.pipe(
 
 export const serverConfig = Config.all({
   port: Config.schema(PortSchema, "PORT").pipe(Config.withDefault(8787)),
-  host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+  host: Config.String("HOST").pipe(Config.withDefault("0.0.0.0")),
 });
 
 export const DEFAULT_UPLOAD_MAX_BYTES = 10_000_000;
@@ -22,10 +22,10 @@ export class AppConfigService extends Context.Service<
   static readonly layer = Layer.effect(
     AppConfigService,
     Effect.gen(function* () {
-      const siteBucket = yield* Config.string("SITE_BUCKET").pipe(
+      const siteBucket = yield* Config.String("SITE_BUCKET").pipe(
         Config.withDefault("forge-sites"),
       );
-      const uploadMaxBytes = yield* Config.number("UPLOAD_MAX_BYTES").pipe(
+      const uploadMaxBytes = yield* Config.Number("UPLOAD_MAX_BYTES").pipe(
         Config.withDefault(DEFAULT_UPLOAD_MAX_BYTES),
       );
 

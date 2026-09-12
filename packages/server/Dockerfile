@@ -1,4 +1,4 @@
-FROM node:25-alpine AS base
+FROM node:26-alpine AS base
 
 WORKDIR /app
 RUN npm install -g --ignore-scripts=false @nubjs/nub
@@ -27,7 +27,7 @@ COPY packages/server/package.json packages/server/package.json
 
 RUN nub install --prod --ignore-scripts --filter @ism0080/forge-server...
 
-FROM node:25-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 WORKDIR /app
 

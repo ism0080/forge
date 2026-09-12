@@ -16,7 +16,7 @@ class LocalFileStorageConfigService extends Context.Service<
 const LocalFileStorageConfigLayer = Layer.effect(
   LocalFileStorageConfigService,
   Effect.gen(function* () {
-    const storageRoot = yield* Config.string("STORAGE_ROOT").pipe(Config.withDefault("./data"));
+    const storageRoot = yield* Config.String("STORAGE_ROOT").pipe(Config.withDefault("./data"));
 
     return {
       storageRoot,

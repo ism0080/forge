@@ -71,7 +71,7 @@ const scaffoldTemplate = (siteId: string, template: Template) =>
     }
   });
 
-const apiBaseUrlConfig = Config.string("FORGE_API_BASE_URL").pipe(
+const apiBaseUrlConfig = Config.String("FORGE_API_BASE_URL").pipe(
   Config.withDefault(DEFAULT_CONFIG.apiBaseUrl),
 );
 
@@ -164,8 +164,8 @@ const applyConfiguredMigrations = (
 const init = Command.make(
   "init",
   {
-    siteId: Argument.string("site-id").pipe(Argument.optional),
-    template: Flag.string("template").pipe(Flag.withDefault("default")),
+    siteId: Argument.String("site-id").pipe(Argument.optional),
+    template: Flag.String("template").pipe(Flag.withDefault("default")),
   },
   Effect.fn(function* ({ siteId, template }) {
     const path = yield* Path.Path;
@@ -213,8 +213,8 @@ const init = Command.make(
 const deploy = Command.make(
   "deploy",
   {
-    folder: Argument.string("folder").pipe(Argument.optional),
-    siteId: Argument.string("site-id").pipe(Argument.optional),
+    folder: Argument.String("folder").pipe(Argument.optional),
+    siteId: Argument.String("site-id").pipe(Argument.optional),
   },
   Effect.fn(function* ({ folder, siteId }) {
     const path = yield* Path.Path;
@@ -310,7 +310,7 @@ const dev = Command.make(
 const dbPush = Command.make(
   "push",
   {
-    directory: Argument.string("directory").pipe(Argument.optional),
+    directory: Argument.String("directory").pipe(Argument.optional),
   },
   Effect.fn(function* ({ directory }) {
     const path = yield* Path.Path;
@@ -362,7 +362,7 @@ const jobsList = Command.make(
 
 const jobsRun = Command.make(
   "run",
-  { id: Argument.string("id") },
+  { id: Argument.String("id") },
   Effect.fn(function* ({ id }) {
     const config = yield* readConfig();
     const client = yield* makeClient(config);

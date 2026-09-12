@@ -10,8 +10,8 @@ export class WebhookConfigService extends Context.Service<
   static readonly layer = Layer.effect(
     WebhookConfigService,
     Effect.gen(function* () {
-      const externalApiUrl = yield* Config.option(Config.string("EXTERNAL_API_URL"));
-      const externalApiKey = yield* Config.option(Config.redacted("EXTERNAL_API_KEY"));
+      const externalApiUrl = yield* Config.option(Config.String("EXTERNAL_API_URL"));
+      const externalApiKey = yield* Config.option(Config.Redacted("EXTERNAL_API_KEY"));
       return {
         externalApiUrl,
         externalApiKey,

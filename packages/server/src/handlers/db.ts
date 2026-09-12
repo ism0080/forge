@@ -1,6 +1,7 @@
 import type { DbDeleteInput, DbListQuery, DbUpdateInput } from "@ism0080/forge-core";
 import { DbChangeEventSchema, SchemaRowChangeEventSchema } from "@ism0080/forge-core";
 import { Effect, Schema, Stream } from "effect";
+import * as Socket from "effect/unstable/socket/Socket";
 import type { Mutable } from "effect/Types";
 import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -54,7 +55,7 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         const eventStream = events.stream(filter).pipe(
           Stream.map((event) => encoder.encode(Schema.encodeSync(ForgeDbEventFromJson)(event))),
           Stream.mapEffect((chunk) =>
-            write(chunk).pipe(
+            write.write(chunk).pipe(
               Effect.tapError((cause) => Effect.logError("socket write failed", cause)),
               Effect.orDie,
             ),
@@ -65,9 +66,8 @@ export const DbHandler = HttpApiBuilder.group(Api, "server.db", (handlers) =>
         yield* Effect.forkScoped(eventStream).pipe(Effect.orDie);
 
         yield* Effect.orDie(
-          socket.runRaw(() => {
-            // server only pushes DB events; client messages are ignored
-          }),
+          // server only pushes DB events; client messages are ignored
+          Stream.runDrain(Socket.toStream(socket)),
         );
 
         return HttpServerResponse.empty();

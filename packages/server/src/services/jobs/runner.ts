@@ -4,11 +4,11 @@ import { JobsService } from "./service.js";
 
 export const JobRunnerLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const enabled = yield* Config.boolean("JOB_RUNNER_ENABLED").pipe(Config.withDefault(true));
+    const enabled = yield* Config.Boolean("JOB_RUNNER_ENABLED").pipe(Config.withDefault(true));
     if (!enabled) {
       return;
     }
-    const intervalMs = yield* Config.number("JOB_RUNNER_INTERVAL_MS").pipe(
+    const intervalMs = yield* Config.Number("JOB_RUNNER_INTERVAL_MS").pipe(
       Config.withDefault(30_000),
     );
     const jobs = yield* JobsService;

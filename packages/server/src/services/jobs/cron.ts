@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 
-export class CronError extends Schema.TaggedErrorClass<CronError>()("CronError", {
+export class CronError extends Schema.TaggedError<CronError>()("CronError", {
   expression: Schema.String,
   message: Schema.String,
 }) {}

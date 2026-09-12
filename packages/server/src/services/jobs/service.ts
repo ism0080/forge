@@ -84,7 +84,7 @@ class JobsConfigService extends Context.Service<JobsConfigService, JobsConfig>()
 const JobsConfigLayer = Layer.effect(
   JobsConfigService,
   Effect.gen(function* () {
-    const storageRoot = yield* Config.string("DATABASE_ROOT").pipe(Config.withDefault("./data/db"));
+    const storageRoot = yield* Config.String("DATABASE_ROOT").pipe(Config.withDefault("./data/db"));
     return { storageRoot };
   }),
 );

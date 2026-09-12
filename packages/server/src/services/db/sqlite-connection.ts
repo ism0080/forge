@@ -57,7 +57,7 @@ const DEFAULT_IDLE_TTL_MS = 300_000;
 export const SiteConnectionsLayer = Layer.effect(
   SiteConnectionsService,
   Effect.gen(function* () {
-    const idleTimeToLiveMs = yield* Config.number("SITE_DB_IDLE_TTL_MS").pipe(
+    const idleTimeToLiveMs = yield* Config.Number("SITE_DB_IDLE_TTL_MS").pipe(
       Config.withDefault(DEFAULT_IDLE_TTL_MS),
     );
 

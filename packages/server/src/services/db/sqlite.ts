@@ -46,7 +46,7 @@ class SqliteDatabaseConfigService extends Context.Service<
 const SqliteDatabaseConfigLayer = Layer.effect(
   SqliteDatabaseConfigService,
   Effect.gen(function* () {
-    const storageRoot = yield* Config.string("DATABASE_ROOT").pipe(Config.withDefault("./data/db"));
+    const storageRoot = yield* Config.String("DATABASE_ROOT").pipe(Config.withDefault("./data/db"));
     return { storageRoot };
   }),
 );

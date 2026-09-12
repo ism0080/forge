@@ -35,7 +35,7 @@ export const WebhookGatewayHandler = HttpApiBuilder.group(
           }
 
           const retryPolicy = Schedule.exponential("100 millis").pipe(
-            Schedule.both(Schedule.recurs(3)),
+            Schedule.upTo({ times: 3 }),
           );
 
           const program = HttpClientRequest.post(apiUrl).pipe(

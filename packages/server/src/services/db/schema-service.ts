@@ -168,17 +168,17 @@ class SchemaConfigService extends Context.Service<SchemaConfigService, SchemaCon
 const SchemaConfigLayer = Layer.effect(
   SchemaConfigService,
   Effect.gen(function* () {
-    const storageRoot = yield* Config.string("DATABASE_ROOT").pipe(Config.withDefault("./data/db"));
-    const maxMigrationCount = yield* Config.number("DB_MIGRATION_MAX_COUNT").pipe(
+    const storageRoot = yield* Config.String("DATABASE_ROOT").pipe(Config.withDefault("./data/db"));
+    const maxMigrationCount = yield* Config.Number("DB_MIGRATION_MAX_COUNT").pipe(
       Config.withDefault(100),
     );
-    const maxMigrationBytes = yield* Config.number("DB_MIGRATION_MAX_BYTES").pipe(
+    const maxMigrationBytes = yield* Config.Number("DB_MIGRATION_MAX_BYTES").pipe(
       Config.withDefault(1_000_000),
     );
-    const maxMigrationBundleBytes = yield* Config.number("DB_MIGRATION_MAX_BUNDLE_BYTES").pipe(
+    const maxMigrationBundleBytes = yield* Config.Number("DB_MIGRATION_MAX_BUNDLE_BYTES").pipe(
       Config.withDefault(5_000_000),
     );
-    const migrationTimeoutMs = yield* Config.number("DB_MIGRATION_TIMEOUT_MS").pipe(
+    const migrationTimeoutMs = yield* Config.Number("DB_MIGRATION_TIMEOUT_MS").pipe(
       Config.withDefault(30_000),
     );
     return {

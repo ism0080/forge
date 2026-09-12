@@ -294,7 +294,7 @@ export const WebhookSendErrorResponseSchema = Schema.Struct({
 });
 export type WebhookSendErrorResponse = Schema.Schema.Type<typeof WebhookSendErrorResponseSchema>;
 
-export class DocumentNotFoundError extends Schema.TaggedErrorClass<DocumentNotFoundError>()(
+export class DocumentNotFoundError extends Schema.TaggedError<DocumentNotFoundError>()(
   "DocumentNotFoundError",
   {
     siteId: SiteId,
@@ -304,7 +304,7 @@ export class DocumentNotFoundError extends Schema.TaggedErrorClass<DocumentNotFo
   { httpApiStatus: 404 },
 ) {}
 
-export class VersionConflictError extends Schema.TaggedErrorClass<VersionConflictError>()(
+export class VersionConflictError extends Schema.TaggedError<VersionConflictError>()(
   "VersionConflictError",
   {
     id: DocumentId,
@@ -314,14 +314,14 @@ export class VersionConflictError extends Schema.TaggedErrorClass<VersionConflic
   { httpApiStatus: 409 },
 ) {}
 
-export class StorageError extends Schema.TaggedErrorClass<StorageError>()("StorageError", {
+export class StorageError extends Schema.TaggedError<StorageError>()("StorageError", {
   operation: Schema.String,
   bucket: Schema.String,
   key: Schema.String,
   cause: Schema.Defect(),
 }) {}
 
-export class StorageNotFoundError extends Schema.TaggedErrorClass<StorageNotFoundError>()(
+export class StorageNotFoundError extends Schema.TaggedError<StorageNotFoundError>()(
   "StorageNotFoundError",
   {
     bucket: Schema.String,
@@ -329,7 +329,7 @@ export class StorageNotFoundError extends Schema.TaggedErrorClass<StorageNotFoun
   },
 ) {}
 
-export class DbOperationError extends Schema.TaggedErrorClass<DbOperationError>()(
+export class DbOperationError extends Schema.TaggedError<DbOperationError>()(
   "DbOperationError",
   {
     operation: Schema.String,
@@ -337,37 +337,37 @@ export class DbOperationError extends Schema.TaggedErrorClass<DbOperationError>(
   },
 ) {}
 
-export class InternalError extends Schema.TaggedErrorClass<InternalError>()(
+export class InternalError extends Schema.TaggedError<InternalError>()(
   "InternalError",
   { message: Schema.String },
   { httpApiStatus: 500 },
 ) {}
 
-export class JobNotFoundError extends Schema.TaggedErrorClass<JobNotFoundError>()(
+export class JobNotFoundError extends Schema.TaggedError<JobNotFoundError>()(
   "JobNotFoundError",
   { siteId: SiteId, id: DocumentId },
   { httpApiStatus: 404 },
 ) {}
 
-export class JobConflictError extends Schema.TaggedErrorClass<JobConflictError>()(
+export class JobConflictError extends Schema.TaggedError<JobConflictError>()(
   "JobConflictError",
   { id: DocumentId, expectedVersion: Schema.Number, actualVersion: Schema.Number },
   { httpApiStatus: 409 },
 ) {}
 
-export class JobInvalidInputError extends Schema.TaggedErrorClass<JobInvalidInputError>()(
+export class JobInvalidInputError extends Schema.TaggedError<JobInvalidInputError>()(
   "JobInvalidInputError",
   { message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
 
-export class SchemaRowNotFoundError extends Schema.TaggedErrorClass<SchemaRowNotFoundError>()(
+export class SchemaRowNotFoundError extends Schema.TaggedError<SchemaRowNotFoundError>()(
   "SchemaRowNotFoundError",
   { siteId: SiteId, table: Schema.String, id: Schema.String },
   { httpApiStatus: 404 },
 ) {}
 
-export class SchemaRowConflictError extends Schema.TaggedErrorClass<SchemaRowConflictError>()(
+export class SchemaRowConflictError extends Schema.TaggedError<SchemaRowConflictError>()(
   "SchemaRowConflictError",
   {
     table: Schema.String,
@@ -378,25 +378,25 @@ export class SchemaRowConflictError extends Schema.TaggedErrorClass<SchemaRowCon
   { httpApiStatus: 409 },
 ) {}
 
-export class SchemaMigrationError extends Schema.TaggedErrorClass<SchemaMigrationError>()(
+export class SchemaMigrationError extends Schema.TaggedError<SchemaMigrationError>()(
   "SchemaMigrationError",
   { message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
 
-export class SchemaInvalidInputError extends Schema.TaggedErrorClass<SchemaInvalidInputError>()(
+export class SchemaInvalidInputError extends Schema.TaggedError<SchemaInvalidInputError>()(
   "SchemaInvalidInputError",
   { message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
 
-export class SiteNotFoundError extends Schema.TaggedErrorClass<SiteNotFoundError>()(
+export class SiteNotFoundError extends Schema.TaggedError<SiteNotFoundError>()(
   "SiteNotFoundError",
   {},
   { httpApiStatus: 404 },
 ) {}
 
-export class UploadTooLargeError extends Schema.TaggedErrorClass<UploadTooLargeError>()(
+export class UploadTooLargeError extends Schema.TaggedError<UploadTooLargeError>()(
   "UploadTooLargeError",
   { maxBytes: Schema.Number, actualBytes: Schema.Number },
   { httpApiStatus: 413 },
@@ -409,7 +409,7 @@ export const DbError = Schema.Union([
 ]);
 export type DbError = Schema.Schema.Type<typeof DbError>;
 
-export class CliError extends Schema.TaggedErrorClass<CliError>()("CliError", {
+export class CliError extends Schema.TaggedError<CliError>()("CliError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {

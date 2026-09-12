@@ -2,7 +2,8 @@ import "varlock/auto-load";
 import { createServer } from "node:http";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Config, Effect, FileSystem, Layer } from "effect";
+import { Config, Effect, Layer } from "effect";
+import * as ByteSize from "effect/ByteSize";
 import { FetchHttpClient, HttpIncomingMessage, HttpRouter } from "effect/unstable/http";
 import { routes } from "./routes.js";
 import { AppConfigLayer, DEFAULT_UPLOAD_MAX_BYTES, serverConfig } from "./config/server.js";
@@ -22,9 +23,9 @@ const ServerLive = NodeHttpServer.layerConfig(() => createServer(), serverConfig
 
 const RequestBodyLimitLive = Layer.effect(
   HttpIncomingMessage.MaxBodySize,
-  Config.number("UPLOAD_MAX_BYTES").pipe(
+  Config.Number("UPLOAD_MAX_BYTES").pipe(
     Config.withDefault(DEFAULT_UPLOAD_MAX_BYTES),
-    Effect.map((bytes) => FileSystem.Size(bytes)),
+    Effect.map((bytes) => ByteSize.bytes(bytes)),
   ),
 );
 
@@ -65,7 +66,7 @@ const HttpLive = Layer.merge(
 );
 
 const main = HttpRouter.serve(routes).pipe(
-  Layer.provide([ServerLive, HttpLive, ApplicationServicesLive]),
+  Layer.provide(Layer.mergeAll(ServerLive, HttpLive, ApplicationServicesLive)),
 );
 
 Layer.launch(main).pipe(NodeRuntime.runMain);

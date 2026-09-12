@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import { ConfigProvider, Context, Effect, Layer, Schema } from "effect";
 import {
   DbCreateResponseSchema,
   JobListResponseSchema,
@@ -54,7 +54,7 @@ const makeAppLayer = (root: string) => {
   return routes.pipe(Layer.provideMerge(Layer.mergeAll(services, infra)));
 };
 
-type Handler = (request: Request) => Promise<Response>;
+type Handler = (request: Request, context?: Context.Context<never>) => Promise<Response>;
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
