@@ -12,15 +12,15 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@ism0080/forge-sdk": "^0.1.4"
+    "@ism0080/forge-sdk": "^0.3.2"
   },
   "devDependencies": {
-    "@ism0080/forge-vite-plugin": "^0.1.4",
-    "@ism0080/oxlint-plugin-forge": "^0.1.1",
+    "@ism0080/forge-vite-plugin": "^0.3.2",
+    "@ism0080/oxlint-plugin-forge": "^0.3.2",
     "@total-typescript/tsconfig": "^1.0.4",
-    "oxfmt": "^0.54.0",
+    "oxfmt": "^0.67.0",
     "oxlint": "^1.69.0",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vite": "^8.0.0"
   }
 }

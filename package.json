@@ -23,7 +23,7 @@
     "publish:all": "pnpm version:all && pnpm -r --if-present publish:local && node scripts/versions.mjs tag"
   },
   "dependencies": {
-    "oxfmt": "^0.54.0",
+    "oxfmt": "^0.67.0",
     "oxlint": "^1.69.0"
   },
   "devDependencies": {
@@ -31,9 +31,9 @@
     "@effect/vitest": "4.0.0-beta.80",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.9.3",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "varlock": "^1.18.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@10.12.1"
 }
