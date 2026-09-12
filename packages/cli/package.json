@@ -1,6 +1,6 @@
 {
   "name": "@ism0080/forge-cli",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "bin": {
     "forge": "dist/index.js"
   },
